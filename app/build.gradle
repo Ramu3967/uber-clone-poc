@@ -58,6 +58,8 @@ dependencies {
 
     // auth
     implementation 'com.google.firebase:firebase-auth'
+    // real time db
+    implementation 'com.google.firebase:firebase-database'
     //fire-store
     implementation 'com.google.firebase:firebase-firestore'
     // navigation components

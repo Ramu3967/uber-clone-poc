@@ -7,7 +7,23 @@
 
     <fragment
         android:id="@+id/homeFragment"
-        android:name="com.example.uberclone.ui.HomeFragment"
+        android:name="com.example.uberclone.ui.fragments.HomeFragment"
         android:label="fragment_home"
-        tools:layout="@layout/fragment_home" />
+        tools:layout="@layout/fragment_home" >
+        <action
+            android:id="@+id/action_homeFragment_to_riderFragment"
+            app:destination="@id/riderFragment" />
+        <action
+            android:id="@+id/action_homeFragment_to_driverFragment"
+            app:destination="@id/driverFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/riderFragment"
+        android:name="com.example.uberclone.ui.fragments.RiderFragment"
+        android:label="RiderFragment" />
+    <fragment
+        android:id="@+id/driverFragment"
+        android:name="com.example.uberclone.ui.fragments.DriverFragment"
+        android:label="fragment_driver"
+        tools:layout="@layout/fragment_driver" />
 </navigation>
