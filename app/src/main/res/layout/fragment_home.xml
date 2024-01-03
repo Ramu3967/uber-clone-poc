@@ -6,6 +6,16 @@
     android:layout_height="match_parent"
     tools:context=".ui.fragments.HomeFragment">
 
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/iv_uber"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:src="@drawable/uber_icon"
+        android:layout_marginTop="20dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/edt_name"
         android:layout_width="match_parent"
@@ -13,7 +23,7 @@
         android:layout_marginTop="20dp"
         android:hint="Enter username"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/iv_uber" />
 
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/edt_password"
