@@ -8,7 +8,10 @@ import android.widget.RadioButton
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.fragment.findNavController
+import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentHomeBinding
+import com.example.uberclone.utils.HOMESCREENDIRECTIONS
 import com.example.uberclone.utils.UberConstants.RIDER
 import com.example.uberclone.vm.SharedViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,6 +27,7 @@ class HomeFragment : Fragment() {
 
     private var currentUserType = RIDER
     private var isRegister = true
+    //  uses the same instance of view-model used by the activity
     private val sharedViewModel by activityViewModels<SharedViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,7 +50,15 @@ class HomeFragment : Fragment() {
 
     private fun observeViewUpdates() {
         sharedViewModel.toastLV.observe(viewLifecycleOwner){
-            Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+            if(it.isNotEmpty()) Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+        }
+
+        sharedViewModel.redirectLV.observe(viewLifecycleOwner){direction ->
+            when(direction){
+                HOMESCREENDIRECTIONS.DIR_RIDER -> findNavController().navigate(R.id.action_homeFragment_to_riderFragment)
+                HOMESCREENDIRECTIONS.DIR_DRIVER -> findNavController().navigate(R.id.action_homeFragment_to_driverFragment)
+                else -> {}
+            }
         }
     }
 

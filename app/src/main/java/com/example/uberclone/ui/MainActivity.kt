@@ -6,6 +6,7 @@ import androidx.activity.viewModels
 import androidx.navigation.fragment.NavHostFragment
 import com.example.uberclone.R
 import com.example.uberclone.databinding.ActivityMainBinding
+import com.example.uberclone.utils.HOMESCREENDIRECTIONS
 import com.example.uberclone.vm.SharedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -22,5 +23,12 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        sharedViewModel.redirectLV.observe(this){
+            // get to the initial state
+            if(it == HOMESCREENDIRECTIONS.DIR_INITIAL){
+                navController.navigate(R.id.homeFragment)
+            }
+        }
     }
 }
