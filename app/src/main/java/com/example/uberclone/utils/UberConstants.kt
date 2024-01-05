@@ -10,5 +10,5 @@ object UberConstants  {
 }
 
 enum class HOMESCREENDIRECTIONS{
-    DIR_INITIAL, DIR_RIDER, DIR_DRIVER
+    DIR_HOME, DIR_RIDER, DIR_DRIVER
 }

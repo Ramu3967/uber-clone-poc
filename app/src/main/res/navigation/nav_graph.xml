@@ -20,7 +20,8 @@
     <fragment
         android:id="@+id/riderFragment"
         android:name="com.example.uberclone.ui.fragments.RiderFragment"
-        android:label="RiderFragment" />
+        android:label="RiderFragment"
+        tools:layout="@layout/fragment_rider"/>
     <fragment
         android:id="@+id/driverFragment"
         android:name="com.example.uberclone.ui.fragments.DriverFragment"

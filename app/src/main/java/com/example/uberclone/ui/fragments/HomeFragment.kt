@@ -25,10 +25,9 @@ class HomeFragment : Fragment() {
     private val binding
         get() = _binding!!
 
-    private var currentUserType = RIDER
-    private var isRegister = true
-    //  uses the same instance of view-model used by the activity
-    private val sharedViewModel by activityViewModels<SharedViewModel>()
+    private var mCurrentUserType = RIDER
+    private var mIsRegister = true
+    private val mSharedViewModel by activityViewModels<SharedViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +37,7 @@ class HomeFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        checkForLoggedInUsers()
         _binding = FragmentHomeBinding.inflate(inflater,container,false)
         return binding.root
     }
@@ -48,12 +48,16 @@ class HomeFragment : Fragment() {
         observeViewUpdates()
     }
 
+    private fun checkForLoggedInUsers() {
+        mSharedViewModel.checkAndRedirectIfNeeded()
+    }
+
     private fun observeViewUpdates() {
-        sharedViewModel.toastLV.observe(viewLifecycleOwner){
+        mSharedViewModel.mToastLV.observe(viewLifecycleOwner){
             if(it.isNotEmpty()) Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
         }
 
-        sharedViewModel.redirectLV.observe(viewLifecycleOwner){direction ->
+        mSharedViewModel.mHomeRedirectLV.observe(viewLifecycleOwner){ direction ->
             when(direction){
                 HOMESCREENDIRECTIONS.DIR_RIDER -> findNavController().navigate(R.id.action_homeFragment_to_riderFragment)
                 HOMESCREENDIRECTIONS.DIR_DRIVER -> findNavController().navigate(R.id.action_homeFragment_to_driverFragment)
@@ -69,19 +73,19 @@ class HomeFragment : Fragment() {
             if(validUI()){
                 val email = binding.edtName.text.toString()
                 val pwd = binding.edtPassword.text.toString()
-                if(isRegister) sharedViewModel.registerUser(email, pwd, currentUserType)
-                else sharedViewModel.loginUser(email, pwd)
+                if(mIsRegister) mSharedViewModel.registerUser(email, pwd, mCurrentUserType)
+                else mSharedViewModel.loginUser(email, pwd)
             }
             else Toast.makeText(requireContext(), "Ensure all the details are filled", Toast.LENGTH_SHORT).show()
         }
 
         binding.rgUser.setOnCheckedChangeListener { _, checkedId ->
             val selectedRadioButton = requireActivity().findViewById<RadioButton>(checkedId)
-            currentUserType = selectedRadioButton.text.toString()
+            mCurrentUserType = selectedRadioButton.text.toString()
         }
 
         binding.tvSubmitUtil.setOnClickListener{
-            if(!isRegister){
+            if(!mIsRegister){
                 binding.btnSubmit.text = "Register"
                 binding.tvSubmitUtil.text = "Existing User? Login"
                 binding.rgUser.visibility=View.VISIBLE
@@ -90,9 +94,8 @@ class HomeFragment : Fragment() {
                 binding.tvSubmitUtil.text = "New User? Register"
                 // no need of the radio group when logging in -> avoiding the case where the same user could be both the rider and the driver
                 binding.rgUser.visibility=View.INVISIBLE
-
             }
-            isRegister=!isRegister
+            mIsRegister=!mIsRegister
         }
     }
 

@@ -3,8 +3,9 @@ package com.example.uberclone.vm
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.example.uberclone.utils.HOMESCREENDIRECTIONS
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_DRIVER
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_INITIAL
+import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_HOME
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_RIDER
 import com.example.uberclone.utils.UberConstants.EMAIL
 import com.example.uberclone.utils.UberConstants.RIDER
@@ -12,6 +13,7 @@ import com.example.uberclone.utils.UberConstants.USERS
 import com.example.uberclone.utils.UberConstants.USER_TYPE
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuth.AuthStateListener
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -27,8 +29,9 @@ class SharedViewModel @Inject constructor(
 ): ViewModel() {
 
     // toast lv for the time being, will be replaced with a viewState object.
-    var toastLV = MutableLiveData("")
-    var redirectLV = MutableLiveData(DIR_INITIAL)
+    var mToastLV = MutableLiveData("")
+    var mHomeRedirectLV = MutableLiveData(DIR_HOME)
+    var mLogoutLV = MutableLiveData("")
 
     // gets triggered by sign-out method of the auth
     private var myAuthStateListener = AuthStateListener { firebaseAuth ->
@@ -36,7 +39,7 @@ class SharedViewModel @Inject constructor(
         // sign out
         kotlin.run {
             // avoiding the logic when you open the app for the first time
-            if(redirectLV.value != DIR_INITIAL) {
+            if(mHomeRedirectLV.value != DIR_HOME) {
                 postSignOutOperations()
             }
         }
@@ -47,8 +50,9 @@ class SharedViewModel @Inject constructor(
     }
 
     private fun postSignOutOperations() {
-        toastLV.value = "Successfully logged out"
-        redirectLV.value = DIR_INITIAL
+        mToastLV.value = "Successfully logged out"
+        setRedirectDirection(DIR_HOME)
+        mLogoutLV.value = DIR_HOME.toString()
         /* disconnect from firebase services
         *  remove listeners to avoid memory leaks */
         disconnectFirebase()
@@ -57,31 +61,33 @@ class SharedViewModel @Inject constructor(
 
     fun loginUser(email: String, pwd: String) {
         auth.signInWithEmailAndPassword(email,pwd).addOnSuccessListener {result ->
-            // redirect to appropriate frag
             result.user?.let { loggedInUser ->
-                val usersRef = database.reference.child(USERS)
-                val loggedInUserRef = usersRef.child(loggedInUser.uid)
-                loggedInUserRef.addValueEventListener(object : ValueEventListener{
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if(snapshot.exists()){
-                            //user data is present in the db
-                            val userType = snapshot.child(USER_TYPE).getValue(String::class.java)
-                            redirectLV.value = if (userType == RIDER) DIR_RIDER else DIR_DRIVER
-                        }else{
-                            toastLV.value = "User data not found"
-                        }
-                    }
-
-                    override fun onCancelled(error: DatabaseError) {
-                        TODO("Not yet implemented")
-                    }
-                })
+                checkUserAndRedirectIfNeeded(loggedInUser)
             }
             Log.d(TAG, "loginUser: login successful")
-
         }.addOnFailureListener {
-            toastLV.value = it.message
+            mToastLV.value = it.message
         }
+    }
+
+    private fun checkUserAndRedirectIfNeeded(loggedInUser: FirebaseUser) {
+        val usersRef = database.reference.child(USERS)
+        val loggedInUserRef = usersRef.child(loggedInUser.uid)
+        loggedInUserRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    //user data is present in the db
+                    val userType = snapshot.child(USER_TYPE).getValue(String::class.java)
+                    setRedirectDirection(if (userType == RIDER) DIR_RIDER else DIR_DRIVER)
+                } else {
+                    mToastLV.value = "User data not found"
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                TODO("Not yet implemented")
+            }
+        })
     }
 
     fun registerUser(email: String, pwd: String,userType: String) {
@@ -91,7 +97,7 @@ class SharedViewModel @Inject constructor(
                 saveUserDetails(result.user?.uid ?: "1", email, userType)
                 Log.d(TAG, "setupUI: redirect to rider fragment")
             }.addOnFailureListener {
-                toastLV.value = it.message
+                mToastLV.value = it.message
             }
     }
 
@@ -112,6 +118,8 @@ class SharedViewModel @Inject constructor(
         })
     }
 
+    private fun setRedirectDirection(direction: HOMESCREENDIRECTIONS) { mHomeRedirectLV.value = direction }
+
     fun logoutUser(){
         auth.signOut()
     }
@@ -124,6 +132,12 @@ class SharedViewModel @Inject constructor(
     private fun disconnectFirebase() {
         auth.removeAuthStateListener(myAuthStateListener)
         database.goOffline()
+    }
+
+    fun checkAndRedirectIfNeeded() {
+        auth.currentUser?.let {
+            checkUserAndRedirectIfNeeded(loggedInUser = it)
+        } ?: Log.d(TAG, "checkAndRedirectIfNeeded: no logged in user has been found")
     }
 
     companion object{
