@@ -1,23 +1,23 @@
 package com.example.uberclone.ui.fragments
 
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.RadioButton
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
+import androidx.navigation.fragment.findNavController
+import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentHomeBinding
+import com.example.uberclone.utils.HOMESCREENDIRECTIONS
 import com.example.uberclone.utils.UberConstants.RIDER
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.database.database
+import com.example.uberclone.vm.SharedViewModel
+import dagger.hilt.android.AndroidEntryPoint
 
 
+@AndroidEntryPoint
 class HomeFragment : Fragment() {
 
     private var _binding: FragmentHomeBinding? = null
@@ -25,11 +25,9 @@ class HomeFragment : Fragment() {
     private val binding
         get() = _binding!!
 
-    private var currentUserType = RIDER
-    private var isReg = true
-
-    private val auth by lazy { Firebase.auth }
-    private val database by lazy { Firebase.database }
+    private var mCurrentUserType = RIDER
+    private var mIsRegister = true
+    private val mSharedViewModel by activityViewModels<SharedViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +37,7 @@ class HomeFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        checkForLoggedInUsers()
         _binding = FragmentHomeBinding.inflate(inflater,container,false)
         return binding.root
     }
@@ -46,6 +45,25 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupUI()
+        observeViewUpdates()
+    }
+
+    private fun checkForLoggedInUsers() {
+        mSharedViewModel.checkAndRedirectIfNeeded()
+    }
+
+    private fun observeViewUpdates() {
+        mSharedViewModel.mToastLV.observe(viewLifecycleOwner){
+            if(it.isNotEmpty()) Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+        }
+
+        mSharedViewModel.mHomeRedirectLV.observe(viewLifecycleOwner){ direction ->
+            when(direction){
+                HOMESCREENDIRECTIONS.DIR_RIDER -> findNavController().navigate(R.id.action_homeFragment_to_riderFragment)
+                HOMESCREENDIRECTIONS.DIR_DRIVER -> findNavController().navigate(R.id.action_homeFragment_to_driverFragment)
+                else -> {}
+            }
+        }
     }
 
     private fun validUI() = !binding.edtName.text.isNullOrEmpty() && !binding.edtPassword.text.isNullOrEmpty()
@@ -55,19 +73,19 @@ class HomeFragment : Fragment() {
             if(validUI()){
                 val email = binding.edtName.text.toString()
                 val pwd = binding.edtPassword.text.toString()
-                if(isReg) registerUser(email, pwd, currentUserType)
-                else loginUser(email, pwd)
+                if(mIsRegister) mSharedViewModel.registerUser(email, pwd, mCurrentUserType)
+                else mSharedViewModel.loginUser(email, pwd)
             }
             else Toast.makeText(requireContext(), "Ensure all the details are filled", Toast.LENGTH_SHORT).show()
         }
 
         binding.rgUser.setOnCheckedChangeListener { _, checkedId ->
             val selectedRadioButton = requireActivity().findViewById<RadioButton>(checkedId)
-            currentUserType = selectedRadioButton.text.toString()
+            mCurrentUserType = selectedRadioButton.text.toString()
         }
 
         binding.tvSubmitUtil.setOnClickListener{
-            if(!isReg){
+            if(!mIsRegister){
                 binding.btnSubmit.text = "Register"
                 binding.tvSubmitUtil.text = "Existing User? Login"
                 binding.rgUser.visibility=View.VISIBLE
@@ -76,47 +94,9 @@ class HomeFragment : Fragment() {
                 binding.tvSubmitUtil.text = "New User? Register"
                 // no need of the radio group when logging in -> avoiding the case where the same user could be both the rider and the driver
                 binding.rgUser.visibility=View.INVISIBLE
-
             }
-            isReg=!isReg
+            mIsRegister=!mIsRegister
         }
-    }
-
-    private fun loginUser(email: String, pwd: String) {
-        auth.signInWithEmailAndPassword(email,pwd).addOnSuccessListener {
-            // redirect to approp frag
-            Log.d(TAG, "loginUser: login successful")
-
-        }.addOnFailureListener {
-            Toast.makeText(requireContext(), it.message, Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun registerUser(email: String, pwd: String,userType: String) {
-        auth.createUserWithEmailAndPassword(email, pwd)
-            .addOnSuccessListener {result ->
-                // save additional user data to a real time db
-                saveUserDetails(result.user?.uid ?: "1", email, userType)
-                Log.d(TAG, "setupUI: redirect to rider fragment")
-            }.addOnFailureListener {
-                Toast.makeText(requireContext(), it.message, Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    private fun saveUserDetails(uid: String, email: String, userType: String) {
-        val dbRef = database.reference
-        val userRef = dbRef.child("users").child(uid)
-        userRef.child("email").setValue(email)
-        userRef.child("userType").setValue(userType)
-        userRef.addValueEventListener(object: ValueEventListener{
-            override fun onDataChange(snapshot: DataSnapshot) {
-                Log.d(TAG, "onDataChange: value changed listener called")
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.d(TAG, "onDataChange: value changed listener cancelled")
-            }
-        })
     }
 
     override fun onDestroyView() {
