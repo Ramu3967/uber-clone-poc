@@ -31,7 +31,7 @@ class SharedViewModel @Inject constructor(
     var redirectLV = MutableLiveData(DIR_INITIAL)
 
     // gets triggered by sign-out method of the auth
-    var authStateListener = auth.addAuthStateListener {  firebaseAuth ->
+    private var myAuthStateListener = AuthStateListener { firebaseAuth ->
         firebaseAuth.currentUser ?:
         // sign out
         kotlin.run {
@@ -42,16 +42,16 @@ class SharedViewModel @Inject constructor(
         }
     }
 
-//    init {
-//        auth.addAuthStateListener { authStateListener }
-//    }
+    init {
+        auth.addAuthStateListener(myAuthStateListener)
+    }
 
     private fun postSignOutOperations() {
         toastLV.value = "Successfully logged out"
         redirectLV.value = DIR_INITIAL
         /* disconnect from firebase services
         *  remove listeners to avoid memory leaks */
-        database.goOffline()
+        disconnectFirebase()
         Log.d(TAG, "postSignOutOperations: Log out successful")
     }
 
@@ -118,7 +118,11 @@ class SharedViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        disconnectFirebase()
+    }
 
+    private fun disconnectFirebase() {
+        auth.removeAuthStateListener(myAuthStateListener)
         database.goOffline()
     }
 
