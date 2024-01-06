@@ -113,7 +113,7 @@ class SharedViewModel @Inject constructor(
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.d(TAG, "onDataChange: value changed listener cancelled")
+                Log.e(TAG, "saveUserDetails: user data save unsuccessful")
             }
         })
     }
