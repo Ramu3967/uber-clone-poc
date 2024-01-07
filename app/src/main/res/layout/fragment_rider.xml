@@ -9,15 +9,23 @@
         android:id="@+id/tv_rider"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:text="Rider"
+        android:text="@string/rider"
         app:layout_constraintEnd_toEndOf="parent"
         tools:layout_editor_absoluteY="16dp" />
+
+    <Button
+        android:id="@+id/btn_call_taxi"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:text="@string/call_taxi"
+        app:layout_constraintEnd_toStartOf="@id/btn_rider_logout"
+        app:layout_constraintTop_toTopOf="@+id/tv_rider" />
 
     <Button
         android:id="@+id/btn_rider_logout"
         android:layout_width="wrap_content"
         android:layout_height="40dp"
-        android:text="Logout"
+        android:text="@string/logout"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@+id/tv_rider" />
 
