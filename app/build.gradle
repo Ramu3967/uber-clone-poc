@@ -4,6 +4,7 @@ plugins {
     id 'com.google.gms.google-services'
     id 'dagger.hilt.android.plugin'
     id 'kotlin-kapt'
+    id 'com.google.android.libraries.mapsplatform.secrets-gradle-plugin'
 }
 
 def getApiKey(){
@@ -26,21 +27,33 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // with this, manifest file can access this key
-        manifestPlaceholders = [MAPS_API_KEY:getApiKey()]
+//        manifestPlaceholders = [MAPS_API_KEY:getApiKey()]
     }
 
     buildFeatures{
         buildConfig = true
     }
 
+    secrets {
+        // Optionally specify a different file name containing your secrets.
+        // The plugin defaults to "local.properties"
+        propertiesFileName = "secrets.properties"
+
+        // Configure which keys should be ignored by the plugin by providing regular expressions.
+        // "sdk.dir" is ignored by default.
+        ignoreList.add("keyToIgnore") // Ignore the key "keyToIgnore"
+        ignoreList.add("sdk.*")       // Ignore all keys matching the regexp "sdk.*"
+    }
+
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField("String","MAPS_API_KEY",getApiKey())
+//            buildConfigField("String","MAPS_API_KEY",getApiKey())
         }
         debug{
-            buildConfigField("String","MAPS_API_KEY",getApiKey())
+//            buildConfigField("String","MAPS_API_KEY",getApiKey())
         }
     }
     viewBinding{

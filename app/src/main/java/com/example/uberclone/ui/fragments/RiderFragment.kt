@@ -14,8 +14,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
+import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -33,10 +35,14 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class RiderFragment: Fragment(R.layout.fragment_rider) {
     private var _binding: FragmentRiderBinding? = null
-    private val sharedViewModel by activityViewModels<SharedViewModel>()
     private val binding get() = _binding!!
 
+    private val mSharedViewModel by activityViewModels<SharedViewModel>()
+    private val mRiderViewModel by viewModels<RiderViewModel>()
+
     private var map: GoogleMap? = null
+    private var mLastLatLng: LatLng? = null
+    private var isRequestActive = false
 
     @Inject
     lateinit var locationPermissions: Array<String>
@@ -60,7 +66,9 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             super.onLocationResult(result)
             Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}")
             result.lastLocation?.let { location ->
-                updateCurrentLocationMarker(LatLng(location.latitude, location.longitude))
+                val lastKnownLatLng = LatLng(location.latitude, location.longitude)
+                mLastLatLng = lastKnownLatLng
+                updateCurrentLocationMarker(lastKnownLatLng)
             }
         }
     }
@@ -75,8 +83,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                 .title("Current Location")
             addMarker(markerOptions)
             // move the camera to the current location
-            moveCamera(CameraUpdateFactory.newLatLng(latLng))
-//            moveCamera(CameraUpdateFactory.zoomIn())
+            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,15f))
         }
     }
 
@@ -91,17 +98,46 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.btnRiderLogout.setOnClickListener { sharedViewModel.logoutUser() }
+        setupUI(savedInstanceState)
+        checkAndRequestLocationPermissions()
+        observeLiveData()
+    }
+
+    private fun setupUI(savedInstanceState: Bundle?) {
+        binding.btnRiderLogout.setOnClickListener { mSharedViewModel.logoutUser() }
         binding.mapView.getMapAsync {
             map = it
         }
         binding.mapView.onCreate(savedInstanceState)
-        checkAndRequestLocationPermissions()
+        binding.btnCallTaxi.setOnClickListener {
+            mLastLatLng?.let {
+                if (!isRequestActive) {
+                    mRiderViewModel.sendTaxiRequest(it)
+                    // TODO: spin a loader and disable this button. Same goes for the below function.
+                } else {
+                    mRiderViewModel.cancelTaxiRequest()
+                }
+                isRequestActive = !isRequestActive
+            } ?: Toast.makeText(requireContext(), "location unavailable", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun observeLiveData() {
+        mRiderViewModel.mRequestStateLV.observe(viewLifecycleOwner){
+            if(it == null) return@observe
+            isRequestActive = it
+            if(it == false) binding.btnCallTaxi.text = "Call Taxi"
+            else  binding.btnCallTaxi.text = "Cancel Taxi"
+            // TODO: resolve the loader here and enable the button
+
+
+        }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+        mLastLatLng = null
         requestLocationUpdates(false)
     }
 
@@ -158,6 +194,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             )
         } else fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
+
 
     companion object{
         const val TAG = "my#RiderFragment"

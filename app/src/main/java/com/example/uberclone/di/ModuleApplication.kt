@@ -5,6 +5,9 @@ import android.content.Context
 import android.os.Build
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.database.database
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,5 +30,11 @@ object ModuleApplication {
     fun provideFusedLocationClient(
         @ApplicationContext context: Context
     ) = LocationServices.getFusedLocationProviderClient(context)
+
+    @Provides
+    fun provideFireBaseAuth() = Firebase.auth
+
+    @Provides
+    fun provideFireBaseDatabase() = Firebase.database
 
 }
