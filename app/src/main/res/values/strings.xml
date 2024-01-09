@@ -2,4 +2,8 @@
     <string name="app_name">Uber Clone</string>
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="call_taxi">Call Taxi</string>
+    <string name="cancel_taxi">Cancel Taxi</string>
+    <string name="logout">Logout</string>
+    <string name="rider">Rider</string>
 </resources>

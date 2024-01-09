@@ -37,8 +37,8 @@ class HomeFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        checkForLoggedInUsers()
         _binding = FragmentHomeBinding.inflate(inflater,container,false)
+        checkForLoggedInUsers()
         return binding.root
     }
 
