@@ -12,7 +12,7 @@ import androidx.navigation.fragment.findNavController
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentHomeBinding
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS
-import com.example.uberclone.utils.UberConstants.RIDER
+import com.example.uberclone.utils.TaxiConstants.RIDER
 import com.example.uberclone.vm.SharedViewModel
 import dagger.hilt.android.AndroidEntryPoint
 

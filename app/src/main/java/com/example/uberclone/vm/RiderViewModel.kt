@@ -4,9 +4,9 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.example.uberclone.utils.UberConstants.DB_ACTIVE_REQUESTS
-import com.example.uberclone.utils.UberConstants.DB_LOCATION
-import com.example.uberclone.utils.UberConstants.DB_REQUESTED_AT
+import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
+import com.example.uberclone.utils.TaxiConstants.DB_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -27,13 +27,11 @@ class RiderViewModel@Inject constructor(
     val mRequestStateLV: LiveData<Boolean?>
         get() = _mRequestStateLV
 
-
-
     private var mActiveReqRef: DatabaseReference
 
     private val mActiveReqListener = object : ValueEventListener{
         override fun onDataChange(snapshot: DataSnapshot) {
-            Log.d(TAG, "onDataChange: data changed}")
+            Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
             // current User unada leda?
             auth.currentUser?.let { user ->
                 if(snapshot.exists()){
@@ -44,7 +42,7 @@ class RiderViewModel@Inject constructor(
         }
 
         override fun onCancelled(error: DatabaseError) {
-            Log.d(TAG, "onCancelled: data cancelled}")
+            Log.d(TAG, "mActiveReqListener_onCancelled: data cancelled}")
         }
     }
 
