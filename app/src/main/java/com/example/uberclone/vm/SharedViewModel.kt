@@ -109,11 +109,11 @@ class SharedViewModel @Inject constructor(
         // use a separate function for these listeners on the db references.
         userRef.addValueEventListener(object: ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                Log.d(TAG, "onDataChange: value changed listener called")
+                Log.d(TAG, "saveUserDetails_onDataChange: value changed listener called")
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "saveUserDetails: user data save unsuccessful")
+                Log.e(TAG, "saveUserDetails_onCancelled: user data save unsuccessful")
             }
         })
     }

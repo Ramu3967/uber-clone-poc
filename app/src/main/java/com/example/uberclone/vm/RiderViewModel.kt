@@ -32,7 +32,6 @@ class RiderViewModel@Inject constructor(
     private val mActiveReqListener = object : ValueEventListener{
         override fun onDataChange(snapshot: DataSnapshot) {
             Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
-            // current User unada leda?
             auth.currentUser?.let { user ->
                 if(snapshot.exists()){
                     _mRequestStateLV.value = snapshot.hasChild(user.uid)

@@ -18,6 +18,14 @@ object TaxiConstants  {
     const val DB_LONGITUDE = "longitude"
     const val DB_REQUESTED_AT = "requestedAt"
 
+    // FB details for the ongoing requests node - driver
+    const val DB_DRIVER_DETAILS = "driverDetails"
+    const val DB_DRIVER_LOCATION = "driverLocation"
+    const val DB_ACCEPTED_AT = "acceptedAt"
+    const val DB_RIDER_DETAILS = "riderDetails"
+    const val DB_RIDER_ID = "riderId"
+    const val DB_RIDER_LOCATION = "riderLocation"
+
     // FB details for the users node
     const val USER_TYPE = "userType"
     const val EMAIL = "email"

@@ -7,13 +7,15 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.uberclone.databinding.FragmentDriverBinding
-import com.example.uberclone.ui.adapters.RequestsAdapter
+import com.example.uberclone.ui.adapters.DriverRequestsAdapter
 import com.example.uberclone.utils.TaxiConstants.MAP_ANIMATION_DURATION
 import com.example.uberclone.utils.TaxiRequest
 import com.example.uberclone.vm.DriverViewModel
@@ -43,9 +45,12 @@ class DriverFragment: Fragment() {
 
     private var map: GoogleMap? = null
     private var mLastLatLng: LatLng? = null
+    private var mLastSelectedRequest: TaxiRequest? = null
+
     private val mRequestAdapter by lazy{
-        RequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){des ->
-            addDestinationAndAdjustMap(mLastLatLng!!, des)
+        DriverRequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){ selectedTaxiRequest ->
+            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.location)
+            mLastSelectedRequest = selectedTaxiRequest
         }
     }
 
@@ -94,6 +99,10 @@ class DriverFragment: Fragment() {
             mLastLatLng?.let {
                 mRequestAdapter.submitList(mActiveRequests, mLastLatLng)
             }
+            mActiveRequests.isNotEmpty().let {
+                binding.btnAcceptRequest.isVisible = it
+                if(!it) mLastSelectedRequest = null
+            }
         }
     }
 
@@ -108,6 +117,7 @@ class DriverFragment: Fragment() {
             adapter = mRequestAdapter
             layoutManager = LinearLayoutManager(requireContext(), RecyclerView.VERTICAL,false)
         }
+        binding.btnAcceptRequest.setOnClickListener { acceptTaxiRequest() }
     }
 
     @SuppressLint("MissingPermission")
@@ -158,24 +168,19 @@ class DriverFragment: Fragment() {
             // move the camera to the current location
             this?.moveCamera(CameraUpdateFactory.newLatLngZoom(driverLocation, 15f))
         }
+    }
 
-//        this?.apply {
-//            // clearing the map
-//            clear()
-//            // adding a marker for the current location
-//            val markerOptions = MarkerOptions()
-//                .position(latLng)
-//                .title("Current Location")
-//            addMarker(markerOptions)
-//            // move the camera to the current location
-//            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
-//        }
+    private fun acceptTaxiRequest(){
+        mLastSelectedRequest?.let {
+            mDriverViewModel.acceptTaxiRequest(it, driverLocation = mLastLatLng!!)
+        } ?: Toast.makeText(requireContext(),"unable to accept this request", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
         mLastLatLng = null
+        mLastSelectedRequest = null
         requestLocationUpdates(false)
     }
 

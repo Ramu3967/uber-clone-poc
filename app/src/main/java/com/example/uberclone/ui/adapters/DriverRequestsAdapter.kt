@@ -11,16 +11,16 @@ import com.example.uberclone.utils.TaxiConstants.UNIT_KM
 import com.example.uberclone.utils.TaxiRequest
 import com.google.android.gms.maps.model.LatLng
 
-class RequestsAdapter(
+class DriverRequestsAdapter(
     private var driverLocation: LatLng?,
     private var taxiRequests: List<TaxiRequest>,
-    private val clickListener: (des: LatLng) -> Unit
-) : RecyclerView.Adapter<RequestsAdapter.RequestsViewHolder>() {
+    private val clickListener: (selectedRequest: TaxiRequest) -> Unit
+) : RecyclerView.Adapter<DriverRequestsAdapter.RequestsViewHolder>() {
     inner class RequestsViewHolder(itemView: View): RecyclerView.ViewHolder(itemView){
         fun bind(item: TaxiRequest){
             itemView.findViewById<TextView>(R.id.tv_item_taxi_req).text = driverLocation?.let {
                 TaxiConstants.calculateDistance(it, item.location).toString() + UNIT_KM
-            } ?: item.toString()
+            } ?: "Distance will be updated"
         }
     }
 
@@ -34,12 +34,13 @@ class RequestsAdapter(
     override fun onBindViewHolder(holder: RequestsViewHolder, position: Int) {
         val taxiRequest = taxiRequests[position]
         holder.bind(taxiRequest)
-        holder.itemView.setOnClickListener { clickListener(taxiRequest.location) }
+        holder.itemView.setOnClickListener { clickListener(taxiRequest) }
     }
 
     fun submitList(newTaxiRequests: List<TaxiRequest>, driverUpdatedLocation: LatLng?){
         driverLocation = driverUpdatedLocation
         taxiRequests = newTaxiRequests
+        // used this as there would be limited number of requests at any time at the moment, and it is easy to implement
         notifyDataSetChanged()
     }
 }
