@@ -17,7 +17,6 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
-import com.example.uberclone.utils.LocationUtils.updateCurrentLocationMarker
 import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -120,6 +119,20 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             // TODO: resolve the loader here and enable the button
 
 
+        }
+    }
+
+    private fun GoogleMap?.updateCurrentLocationMarker(latLng: LatLng) {
+        this?.apply {
+            // clearing the map
+            clear()
+            // adding a marker for the current location
+            val markerOptions = MarkerOptions()
+                .position(latLng)
+                .title("Current Location")
+            addMarker(markerOptions)
+            // move the camera to the current location
+            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
         }
     }
 

@@ -23,7 +23,13 @@ object TaxiConstants  {
     const val EMAIL = "email"
     const val USERS = "users"
 
-    private const val EARTH_RADIUS = 6371.0 // Earth radius in kilometers
+    const val UNIT_KM = " KM"
+
+    // Rider Scenario
+    const val MAP_ANIMATION_DURATION = 1000
+
+    // Earth's radius in kilometers
+    private const val EARTH_RADIUS = 6371.0
 
     // Function to calculate distance using Haversine formula
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -36,7 +42,8 @@ object TaxiConstants  {
 
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-        return EARTH_RADIUS * c
+        val distance = EARTH_RADIUS * c
+        return String.format("%.2f", distance).toDouble()
     }
 
     fun calculateDistance(source: LatLng, destination: LatLng): Double {
