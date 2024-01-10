@@ -68,24 +68,12 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
-                updateCurrentLocationMarker(lastKnownLatLng)
+                map?.updateCurrentLocationMarker(lastKnownLatLng)
             }
         }
     }
 
-    private fun updateCurrentLocationMarker(latLng: LatLng) {
-        map?.apply {
-            // clearing the map
-            clear()
-            // adding a marker for the current location
-            val markerOptions = MarkerOptions()
-                .position(latLng)
-                .title("Current Location")
-            addMarker(markerOptions)
-            // move the camera to the current location
-            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,15f))
-        }
-    }
+
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -131,6 +119,20 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             // TODO: resolve the loader here and enable the button
 
 
+        }
+    }
+
+    private fun GoogleMap?.updateCurrentLocationMarker(latLng: LatLng) {
+        this?.apply {
+            // clearing the map
+            clear()
+            // adding a marker for the current location
+            val markerOptions = MarkerOptions()
+                .position(latLng)
+                .title("Current Location")
+            addMarker(markerOptions)
+            // move the camera to the current location
+            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
         }
     }
 

@@ -25,6 +25,6 @@
     <fragment
         android:id="@+id/driverFragment"
         android:name="com.example.uberclone.ui.fragments.DriverFragment"
-        android:label="fragment_driver"
-        tools:layout="@layout/fragment_driver" />
+        tools:layout="@layout/fragment_driver"
+        android:label="DriverFragment" />
 </navigation>

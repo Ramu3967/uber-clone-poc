@@ -7,10 +7,10 @@ import com.example.uberclone.utils.HOMESCREENDIRECTIONS
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_DRIVER
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_HOME
 import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_RIDER
-import com.example.uberclone.utils.UberConstants.EMAIL
-import com.example.uberclone.utils.UberConstants.RIDER
-import com.example.uberclone.utils.UberConstants.USERS
-import com.example.uberclone.utils.UberConstants.USER_TYPE
+import com.example.uberclone.utils.TaxiConstants.EMAIL
+import com.example.uberclone.utils.TaxiConstants.RIDER
+import com.example.uberclone.utils.TaxiConstants.USERS
+import com.example.uberclone.utils.TaxiConstants.USER_TYPE
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuth.AuthStateListener
 import com.google.firebase.auth.FirebaseUser
