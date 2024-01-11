@@ -17,6 +17,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
+import com.example.uberclone.utils.TaxiConstants
 import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -26,7 +27,9 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -117,12 +120,42 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             if(it == false) binding.btnCallTaxi.text = "Call Taxi"
             else  binding.btnCallTaxi.text = "Cancel Taxi"
             // TODO: resolve the loader here and enable the button
+        }
 
+        mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){
+            it?.let {
+                map?.updateDriverLocation(it)
+            }
+        }
+    }
 
+    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) {
+        mLastLatLng?.let {riderLoc ->
+            this?.clear()
+            // adding a marker for the rider
+            val markerOptions = MarkerOptions()
+                .position(riderLoc)
+                .title("Current Location")
+            this?.addMarker(markerOptions)
+            // adding a marker for the driver
+            val driverMarkerOpt = MarkerOptions()
+                .position(driverLoc)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
+                .title("Driver's Location")
+            this?.addMarker(driverMarkerOpt)
+            // constructing a bound to fit two points on the map
+            val bounds = LatLngBounds.Builder()
+                .include(riderLoc)
+                .include(driverLoc)
+                .build()
+            map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
+                TaxiConstants.MAP_ANIMATION_DURATION, null)
         }
     }
 
     private fun GoogleMap?.updateCurrentLocationMarker(latLng: LatLng) {
+        // if there are any driver updates, ignore this logic and use the above function to update the marker.
+        if(mRiderViewModel.mDriverUpdatesLV.value != null) return
         this?.apply {
             // clearing the map
             clear()

@@ -5,10 +5,18 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
+import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
+import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_LATITUDE
 import com.example.uberclone.utils.TaxiConstants.DB_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_LONGITUDE
+import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
+import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
+import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -27,16 +35,37 @@ class RiderViewModel@Inject constructor(
     val mRequestStateLV: LiveData<Boolean?>
         get() = _mRequestStateLV
 
+    var mDriverUpdatesLV : MutableLiveData<LatLng?> = MutableLiveData(null)
+
     private var mActiveReqRef: DatabaseReference
+    private lateinit var mOngoingReqRef: DatabaseReference
+    private var acceptedDriverDbRef: DatabaseReference? = null
+
 
     private val mActiveReqListener = object : ValueEventListener{
-        override fun onDataChange(snapshot: DataSnapshot) {
+        override fun onDataChange(activeReqSnapshot: DataSnapshot) {
             Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
             auth.currentUser?.let { user ->
-                if(snapshot.exists()){
-                    _mRequestStateLV.value = snapshot.hasChild(user.uid)
+                if(activeReqSnapshot.exists()){
+                    val isReqExists = activeReqSnapshot.hasChild(user.uid)
+                    _mRequestStateLV.value = isReqExists
+                    // when an active req is deleted and could be found in onGoing Req -> Driver just accepted this req
+                    /*
+                     disable the 'call taxi' button and start updating the driver's location
+                      */
+                    if(isReqExists){
+                        Log.d(TAG, "onDataChange: Rider's request is still in activeRequests. No driver has confirmed it yet")
+                    }
+                    else{
+                        // search in ongoing requests
+                        checkRiderInOngoingRequests(user)
+                    }
                 }
-                else _mRequestStateLV.value = false
+                else {
+                    _mRequestStateLV.value = false
+                    // case where the current rider's was the only one active request that got deleted by accepting the req by driver.
+                    checkRiderInOngoingRequests(user)
+                }
             }
         }
 
@@ -45,10 +74,55 @@ class RiderViewModel@Inject constructor(
         }
     }
 
+    private fun checkRiderInOngoingRequests(user: FirebaseUser) {
+        mOngoingReqRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(ongoingReqSnapshot: DataSnapshot) {
+
+                val matchedReq = ongoingReqSnapshot.children.firstOrNull {
+                    it.child(DB_RIDER_DETAILS).child(DB_RIDER_ID)
+                        .getValue(String::class.java) == user.uid
+                }
+
+                matchedReq?.ref.let {
+                    acceptedDriverDbRef = it
+                    setDriverDbLocationListener()
+                }
+
+                mOngoingReqRef.removeEventListener(this)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "onCancelled: Rider has no requests ")
+            }
+
+        })
+    }
+
+    fun setDriverDbLocationListener(){
+        acceptedDriverDbRef?.let {
+            val driverLocationRef = it.child(DB_DRIVER_DETAILS).child(DB_DRIVER_LOCATION)
+            driverLocationRef.addValueEventListener(object: ValueEventListener{
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val latitude = snapshot.child(DB_LATITUDE).getValue(Double::class.java)!!
+                    val longitude = snapshot.child(DB_LONGITUDE).getValue(Double::class.java)!!
+                    mDriverUpdatesLV.value= LatLng(latitude,longitude)
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "onCancelled: failed to add eventListener ${error.message}", )
+                    mDriverUpdatesLV.value = null
+                }
+            })
+
+        } ?: Log.e(TAG, "setDriverSnapshotListener: no accepted driver found, so no listener was set")
+    }
+
     init {
         val dbRef = database.reference
         mActiveReqRef = dbRef.child(DB_ACTIVE_REQUESTS)
         mActiveReqRef.addValueEventListener(mActiveReqListener)
+
+        mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS) // what if there's no ongoing req, how'd you search for the rider id?
     }
 
     fun sendTaxiRequest(latLng: LatLng){
@@ -74,6 +148,7 @@ class RiderViewModel@Inject constructor(
     override fun onCleared() {
         super.onCleared()
         mActiveReqRef.removeEventListener(mActiveReqListener)
+        acceptedDriverDbRef = null
     }
 
     companion object{

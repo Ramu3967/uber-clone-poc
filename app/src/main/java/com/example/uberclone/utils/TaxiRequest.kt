@@ -5,7 +5,6 @@ import com.example.uberclone.utils.TaxiConstants.DB_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_LONGITUDE
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
 import com.google.android.gms.maps.model.LatLng
-import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.database.DataSnapshot
 
 data class TaxiRequest(

@@ -8,6 +8,7 @@ import com.example.uberclone.utils.TaxiConstants
 import com.example.uberclone.utils.TaxiConstants.DB_ACCEPTED_AT
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
@@ -19,7 +20,6 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.firebase.database.childEvents
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -32,6 +32,10 @@ class DriverViewModel@Inject constructor(
     private val _mUserRequestsLV = MutableLiveData(emptyList<TaxiRequest>())
     val mUserRequestsLV: LiveData<List<TaxiRequest>>
         get() = _mUserRequestsLV
+
+    private val _navigationLV = MutableLiveData<LatLng?>(null)
+    val mNavigationLV
+    get() = _navigationLV
 
     private var isListeningForDb = false
 
@@ -69,23 +73,36 @@ class DriverViewModel@Inject constructor(
                     if(snapshot.hasChild(driverId)){
                         // removing the active req associated with this rider
                         val acceptedReq = snapshot.child(driverId)
-                        val riderId = acceptedReq.child("riderDetails").child("riderId").getValue(String::class.java)
+                        val riderDetailsRef = acceptedReq.child(DB_RIDER_DETAILS)
+                        val riderId = riderDetailsRef.child(DB_RIDER_ID).getValue(String::class.java)
                         riderId?.let {
-                        Log.d(TAG, "mOngoingReqDbListener_onDataChange: The driver($driverId) has an on going request with the user($riderId)")
+                            Log.d(TAG, "mOngoingReqDbListener_onDataChange: The driver($driverId) has an on going request with the user($riderId)")
                             deleteActiveRequestWithId(activeReqId = it)
+                            try{
+                                val locationSnapshot = riderDetailsRef.child(DB_RIDER_LOCATION)
+                                val latitude = locationSnapshot.child(TaxiConstants.DB_LATITUDE)
+                                    .getValue(Double::class.java)!!
+                                val longitude = locationSnapshot.child(TaxiConstants.DB_LONGITUDE)
+                                    .getValue(Double::class.java)!!
+                                _navigationLV.value = LatLng(latitude, longitude)
+                            }catch (e:Exception){
+                                Log.e(TAG, "mOngoingReqDbListener_catch: exception occurred ${e.message}", )
+                            }
                         }
                             ?: Log.e(TAG,"unable to delete the rider - No such rider")
                     }else{
                         Log.d(TAG, "mOngoingReqDbListener_onDataChange: This driver doesn't have any on going requests")
+                        _navigationLV.value = null
                     }
                 }
             }else{
                 Log.d(TAG, "mOngoingReqDbListener_onDataChange: No records of ongoing requests found")
+                _navigationLV.value = null
             }
         }
 
         override fun onCancelled(error: DatabaseError) {
-            TODO("Not yet implemented")
+            Log.e(TAG, "mOngoingReqDbListener_onCancelled: error occurred ${error.message}", )
         }
     }
 
@@ -93,15 +110,17 @@ class DriverViewModel@Inject constructor(
         mActiveReqRef.child(activeReqId).addListenerForSingleValueEvent(object : ValueEventListener{
             override fun onDataChange(snapshot: DataSnapshot) {
                 if(snapshot.exists()){
+                    // TODO: enable a loader
                     // this triggers the activeReq listeners and updates all the drivers who are logged in
                      mActiveReqRef.child(activeReqId).removeValue()
                     Log.d(TAG, "deleteActiveRequestWithId_onDataChange: request with ID: $activeReqId deleted ")
                 }
+                mActiveReqRef.child(activeReqId).removeEventListener(this)
             }
 
             // called if there is an exception on accessing this child
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "deleteActiveRequestWithId_onCancelled: Child with ID $activeReqId does not exist", )
+                Log.e(TAG, "deleteActiveRequestWithId_onCancelled: Rider with Active request ID $activeReqId does not exist", )
             }
         })
     }
@@ -137,7 +156,7 @@ class DriverViewModel@Inject constructor(
             mActiveReqRef = dbRef.child(TaxiConstants.DB_ACTIVE_REQUESTS)
             mActiveReqRef.addValueEventListener(mActiveReqDbListener)
 
-            mOngoingReqRef = dbRef.child("ongoingRequests")
+            mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS)
             mOngoingReqRef.addValueEventListener(mOngoingReqDbListener)
         }
     }

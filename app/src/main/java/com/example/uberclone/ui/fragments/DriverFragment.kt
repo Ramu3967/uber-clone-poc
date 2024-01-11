@@ -1,6 +1,8 @@
 package com.example.uberclone.ui.fragments
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
@@ -104,6 +106,11 @@ class DriverFragment: Fragment() {
                 if(!it) mLastSelectedRequest = null
             }
         }
+
+        mDriverViewModel.mNavigationLV.observe(viewLifecycleOwner){
+            it?.let {destination ->
+                startNavigation(src = mLastLatLng!!, des = destination)}
+        }
     }
 
     private fun setupUI(savedInstanceState: Bundle?) {
@@ -175,6 +182,25 @@ class DriverFragment: Fragment() {
             mDriverViewModel.acceptTaxiRequest(it, driverLocation = mLastLatLng!!)
         } ?: Toast.makeText(requireContext(),"unable to accept this request", Toast.LENGTH_SHORT).show()
     }
+
+    private fun startNavigation(src:LatLng, des: LatLng) {
+        // Create a URI for the source and destination locations
+        val uri = "http://maps.google.com/maps?saddr=${src.latitude},${src.longitude}&daddr=${des.latitude},${des.longitude}"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+
+        // Specify the package to ensure that the intent is handled by Google Maps
+        intent.setPackage("com.google.android.apps.maps")
+
+        // Check if there's an app available to handle the intent
+        if (intent.resolveActivity(requireActivity().packageManager) != null) {
+            startActivity(intent)
+        } else {
+            // If Google Maps is not installed, you can handle this case or prompt the user to install it
+            // Alternatively, you can use a different navigation app
+            Toast.makeText(requireContext(), "Google Maps app not installed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     override fun onDestroyView() {
         super.onDestroyView()

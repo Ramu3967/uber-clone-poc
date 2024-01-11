@@ -19,6 +19,7 @@ object TaxiConstants  {
     const val DB_REQUESTED_AT = "requestedAt"
 
     // FB details for the ongoing requests node - driver
+    const val DB_ONGOING_REQUESTS = "ongoingRequests"
     const val DB_DRIVER_DETAILS = "driverDetails"
     const val DB_DRIVER_LOCATION = "driverLocation"
     const val DB_ACCEPTED_AT = "acceptedAt"
