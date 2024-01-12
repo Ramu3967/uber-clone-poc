@@ -39,6 +39,8 @@ class DriverViewModel@Inject constructor(
     get() = _navigationLV
 
     private var isListeningForDb = false
+    private var isRequestAccepted = false
+
 
     private lateinit var mActiveReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
@@ -147,6 +149,8 @@ class DriverViewModel@Inject constructor(
         riderRef.child(DB_RIDER_ID).setValue(riderId)
         val rLoc = "${riderLocation.latitude}$DELIMITER${riderLocation.longitude}"
         riderRef.child(DB_RIDER_LOCATION).setValue(rLoc)
+
+        isRequestAccepted = true
     }
 
     fun listenForDbChanges(){
@@ -158,14 +162,37 @@ class DriverViewModel@Inject constructor(
 
             mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS)
             mOngoingReqRef.addValueEventListener(mOngoingReqDbListener)
+
+            // exclude the parent from listening to this child when you update the driver location for the associated rider
+            val mDriverDetailsRef = mOngoingReqRef.child(auth.currentUser?.uid!!).child(DB_DRIVER_DETAILS)
+            mDriverDetailsRef.removeEventListener(mOngoingReqDbListener)
         }
     }
+
+    // TODO: implement cancel ride functionality
 
     override fun onCleared() {
         super.onCleared()
         if(::mActiveReqRef.isInitialized) mActiveReqRef.removeEventListener(mActiveReqDbListener)
         if(::mOngoingReqRef.isInitialized) mOngoingReqRef.removeEventListener(mOngoingReqDbListener)
         isListeningForDb = false
+        isRequestAccepted = false
+    }
+
+    // this should happen after the request has been accepted by the driver, else there would be no ongoingRequests node.
+    fun updateDriverLocationInOngoingReqToFirebase(driverLocation: LatLng) {
+        if(isRequestAccepted){
+            // onGoingRefListener shouldn't react to this update, hence updated in the 'listenForDbChanges()'
+            val driverDetailsRef = mOngoingReqRef.child(auth.currentUser?.uid!!).child(DB_DRIVER_DETAILS)
+            val loc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
+            driverDetailsRef.child(DB_DRIVER_LOCATION).setValue(loc)
+        }else{
+            Log.e(
+                TAG,
+                "updateDriverLocationInOngoingReqToFirebase: Failed to update the driver location onto FB as the request isn't accepted yet",
+                
+            )
+        }
     }
 
     companion object{

@@ -67,7 +67,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             super.onLocationResult(result)
-            Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}")
+            Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
@@ -75,8 +75,6 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             }
         }
     }
-
-
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -217,10 +215,10 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates(boolean: Boolean = true) {
         if(boolean) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,TaxiConstants.LOCATION_INTERVAL)
                 .setWaitForAccurateLocation(false)
-                .setMinUpdateIntervalMillis(20000)
-                .setMaxUpdateDelayMillis(30000)
+                .setMinUpdateIntervalMillis(TaxiConstants.LOCATION_FASTEST_INTERVAL)
+                .setMaxUpdateDelayMillis(TaxiConstants.LOCATION_MAX_WAIT_TIME)
                 .build()
             fusedLocationProviderClient.requestLocationUpdates(
                 locationRequest,

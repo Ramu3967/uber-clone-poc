@@ -18,6 +18,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.uberclone.databinding.FragmentDriverBinding
 import com.example.uberclone.ui.adapters.DriverRequestsAdapter
+import com.example.uberclone.utils.TaxiConstants.LOCATION_FASTEST_INTERVAL
+import com.example.uberclone.utils.TaxiConstants.LOCATION_INTERVAL
+import com.example.uberclone.utils.TaxiConstants.LOCATION_MAX_WAIT_TIME
 import com.example.uberclone.utils.TaxiConstants.MAP_ANIMATION_DURATION
 import com.example.uberclone.utils.TaxiRequest
 import com.example.uberclone.vm.DriverViewModel
@@ -70,12 +73,14 @@ class DriverFragment: Fragment() {
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             super.onLocationResult(result)
-            Log.d(RiderFragment.TAG, "onLocationResult: ${result.locations.last().latitude}")
+            Log.d(RiderFragment.TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
                 mDriverViewModel.listenForDbChanges()
                 map?.updateCurrentLocationMarker(lastKnownLatLng)
+                // update driver location on firebase
+                mDriverViewModel.updateDriverLocationInOngoingReqToFirebase(driverLocation = mLastLatLng!!)
             }
         }
     }
@@ -110,7 +115,8 @@ class DriverFragment: Fragment() {
 
         mDriverViewModel.mNavigationLV.observe(viewLifecycleOwner){
             it?.let {destination ->
-                startNavigation(src = mLastLatLng!!, des = destination)}
+                startNavigation(src = mLastLatLng!!, des = destination)
+            }
         }
     }
 
@@ -131,10 +137,10 @@ class DriverFragment: Fragment() {
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates(boolean: Boolean = true) {
         if(boolean) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL)
                 .setWaitForAccurateLocation(false)
-                .setMinUpdateIntervalMillis(20000)
-                .setMaxUpdateDelayMillis(30000)
+                .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL)
+                .setMaxUpdateDelayMillis(LOCATION_MAX_WAIT_TIME)
                 .build()
             fusedLocationProviderClient.requestLocationUpdates(
                 locationRequest,

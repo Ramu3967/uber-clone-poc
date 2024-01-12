@@ -11,6 +11,11 @@ object TaxiConstants  {
     const val RIDER = "Rider"
     const val DRIVER = "Driver"
 
+    // Location constants
+    const val LOCATION_INTERVAL=10000L
+    const val LOCATION_FASTEST_INTERVAL = 10000L
+    const val LOCATION_MAX_WAIT_TIME = 20000L
+
     // FB details for the active requests node - rider
     const val DB_ACTIVE_REQUESTS = "activeRequests"
     const val DB_LOCATION = "location"
