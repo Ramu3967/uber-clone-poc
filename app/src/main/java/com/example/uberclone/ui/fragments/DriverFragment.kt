@@ -56,7 +56,8 @@ class DriverFragment: Fragment() {
         }
     }
 
-    private var desMarker: Marker? = null
+    private var mRiderMarker: Marker? = null
+    private var mDriverMarker: Marker? = null
 
     private var mActiveRequests: List<TaxiRequest> = emptyList()
 
@@ -143,17 +144,24 @@ class DriverFragment: Fragment() {
         } else fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun addDestinationAndAdjustMap(src: LatLng, des: LatLng){
-        desMarker?.remove()
+    private fun addDestinationAndAdjustMap(driverLocation: LatLng, riderLocation: LatLng){
+        mRiderMarker?.remove()
         val newMarkerOptions = MarkerOptions()
-            .position(des)
+            .position(riderLocation)
             .title("Rider's Location")
-        desMarker = map?.addMarker(newMarkerOptions)
+        mRiderMarker = map?.addMarker(newMarkerOptions)
+
+        mDriverMarker?.remove()
+        val markerOptions = MarkerOptions()
+            .position(driverLocation)
+            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
+            .title("Current Location")
+        mDriverMarker = map?.addMarker(markerOptions)
 
         // constructing a bound to fit two points on the map
         val bounds = LatLngBounds.Builder()
-            .include(src)
-            .include(des)
+            .include(driverLocation)
+            .include(riderLocation)
             .build()
         // moving the camera
         map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
@@ -161,8 +169,8 @@ class DriverFragment: Fragment() {
     }
 
     private fun GoogleMap?.updateCurrentLocationMarker(driverLocation: LatLng) {
-        desMarker?.let {
-            addDestinationAndAdjustMap(src = driverLocation, des = it.position)
+        mRiderMarker?.let {
+            addDestinationAndAdjustMap(driverLocation = driverLocation, riderLocation = it.position)
         } ?: kotlin.run {
             // clearing the map
             this?.clear()
@@ -171,7 +179,7 @@ class DriverFragment: Fragment() {
                 .position(driverLocation)
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
                 .title("Current Location")
-            this?.addMarker(markerOptions)
+            mDriverMarker = this?.addMarker(markerOptions)
             // move the camera to the current location
             this?.moveCamera(CameraUpdateFactory.newLatLngZoom(driverLocation, 15f))
         }
@@ -207,6 +215,8 @@ class DriverFragment: Fragment() {
         _binding = null
         mLastLatLng = null
         mLastSelectedRequest = null
+        mDriverMarker = null
+        mRiderMarker = null
         requestLocationUpdates(false)
     }
 

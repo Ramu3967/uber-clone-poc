@@ -33,6 +33,7 @@ object TaxiConstants  {
     const val USERS = "users"
 
     const val UNIT_KM = " KM"
+    const val DELIMITER = ":"
 
     // Rider Scenario
     const val MAP_ANIMATION_DURATION = 1000

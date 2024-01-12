@@ -7,13 +7,12 @@ import androidx.lifecycle.ViewModel
 import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
-import com.example.uberclone.utils.TaxiConstants.DB_LATITUDE
 import com.example.uberclone.utils.TaxiConstants.DB_LOCATION
-import com.example.uberclone.utils.TaxiConstants.DB_LONGITUDE
 import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
+import com.example.uberclone.utils.TaxiConstants.DELIMITER
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -103,9 +102,8 @@ class RiderViewModel@Inject constructor(
             val driverLocationRef = it.child(DB_DRIVER_DETAILS).child(DB_DRIVER_LOCATION)
             driverLocationRef.addValueEventListener(object: ValueEventListener{
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    val latitude = snapshot.child(DB_LATITUDE).getValue(Double::class.java)!!
-                    val longitude = snapshot.child(DB_LONGITUDE).getValue(Double::class.java)!!
-                    mDriverUpdatesLV.value= LatLng(latitude,longitude)
+                    val (lat,lon) = snapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
+                    mDriverUpdatesLV.value= LatLng(lat,lon)
                 }
 
                 override fun onCancelled(error: DatabaseError) {
@@ -130,7 +128,8 @@ class RiderViewModel@Inject constructor(
             val dbRef = database.reference
             val activeReqRef = dbRef.child(DB_ACTIVE_REQUESTS).child(user.uid)
 
-            activeReqRef.child(DB_LOCATION).setValue(latLng)
+            val loc = "${latLng.latitude}${DELIMITER}${latLng.longitude}"
+            activeReqRef.child(DB_LOCATION).setValue(loc)
             activeReqRef.child(DB_REQUESTED_AT).setValue(System.currentTimeMillis())
 
         } ?: Log.d(TAG,"taxiRequest: unable to send req as there's no user available")

@@ -12,6 +12,7 @@ import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DELIMITER
 import com.example.uberclone.utils.TaxiRequest
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
@@ -48,7 +49,7 @@ class DriverViewModel@Inject constructor(
             if (snapshot.exists()) {
                 val results = mutableListOf<TaxiRequest>()
                 for (requestSnapshot in snapshot.children) {
-                    results.add(TaxiRequest.fromSnapshot(requestSnapshot))
+                    results.add(TaxiRequest.fromActiveReqSnapshot(requestSnapshot))
                 }
                 _mUserRequestsLV.value= results
             } else {
@@ -80,11 +81,8 @@ class DriverViewModel@Inject constructor(
                             deleteActiveRequestWithId(activeReqId = it)
                             try{
                                 val locationSnapshot = riderDetailsRef.child(DB_RIDER_LOCATION)
-                                val latitude = locationSnapshot.child(TaxiConstants.DB_LATITUDE)
-                                    .getValue(Double::class.java)!!
-                                val longitude = locationSnapshot.child(TaxiConstants.DB_LONGITUDE)
-                                    .getValue(Double::class.java)!!
-                                _navigationLV.value = LatLng(latitude, longitude)
+                                val (lat,lon) = locationSnapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
+                                _navigationLV.value = LatLng(lat, lon)
                             }catch (e:Exception){
                                 Log.e(TAG, "mOngoingReqDbListener_catch: exception occurred ${e.message}", )
                             }
@@ -142,11 +140,13 @@ class DriverViewModel@Inject constructor(
     private fun saveOngoingRequests(driverId: String, driverLocation: LatLng, riderId: String, riderLocation: LatLng){
         val ongoingReqRef = mOngoingReqRef.child(driverId)
         val driverRef = ongoingReqRef.child(DB_DRIVER_DETAILS)
-        driverRef.child(DB_DRIVER_LOCATION).setValue(driverLocation)
+        val dLoc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
+        driverRef.child(DB_DRIVER_LOCATION).setValue(dLoc)
         driverRef.child(DB_ACCEPTED_AT).setValue(System.currentTimeMillis())
         val riderRef = ongoingReqRef.child(DB_RIDER_DETAILS)
         riderRef.child(DB_RIDER_ID).setValue(riderId)
-        riderRef.child(DB_RIDER_LOCATION).setValue(riderLocation)
+        val rLoc = "${riderLocation.latitude}$DELIMITER${riderLocation.longitude}"
+        riderRef.child(DB_RIDER_LOCATION).setValue(rLoc)
     }
 
     fun listenForDbChanges(){
