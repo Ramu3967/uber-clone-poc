@@ -12,9 +12,13 @@ object TaxiConstants  {
     const val DRIVER = "Driver"
 
     // Location constants
-    const val LOCATION_INTERVAL=10000L
-    const val LOCATION_FASTEST_INTERVAL = 10000L
-    const val LOCATION_MAX_WAIT_TIME = 20000L
+    const val LOCATION_INTERVAL=4000L
+    const val LOCATION_FASTEST_INTERVAL = 5000L
+    const val LOCATION_MAX_WAIT_TIME = 10000L
+
+    const val LOCATION_INTERVAL_RIDER=10000L
+    const val LOCATION_FASTEST_INTERVAL_RIDER = 10000L
+    const val LOCATION_MAX_WAIT_TIME_RIDER = 20000L
 
     // FB details for the active requests node - rider
     const val DB_ACTIVE_REQUESTS = "activeRequests"
@@ -38,13 +42,16 @@ object TaxiConstants  {
     const val USERS = "users"
 
     const val UNIT_KM = " KM"
-    const val DELIMITER = ":"
+    const val DELIMITER = ","
 
     // Rider Scenario
     const val MAP_ANIMATION_DURATION = 1000
 
-    // Earth's radius in kilometers
+    // kilometers
     private const val EARTH_RADIUS = 6371.0
+    const val DIST_NEAR_BY= 3.0
+    const val DIST_ARRIVAL_MIN = 0.0
+    const val DIST_ARRIVAL_MAX = 0.15
 
     // Function to calculate distance using Haversine formula
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

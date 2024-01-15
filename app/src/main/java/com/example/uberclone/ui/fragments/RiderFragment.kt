@@ -3,6 +3,7 @@ package com.example.uberclone.ui.fragments
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
@@ -31,6 +32,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -120,40 +122,54 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             // TODO: resolve the loader here and enable the button
         }
 
-        mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){
-            it?.let {
-                map?.updateDriverLocation(it)
+        mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){ driverUpdate ->
+            val (driverLocation, notificationMsg,driverReached) = driverUpdate
+            driverLocation?.let {  map?.updateDriverLocation(it) }
+            notificationMsg?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
+            if(driverReached) {
+                Toast.makeText(requireContext(), "Your driver has arrived", Toast.LENGTH_SHORT).show()
+                mRiderViewModel.stopDriverUpdates()
             }
         }
     }
 
-    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) {
+    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run{
+
         mLastLatLng?.let {riderLoc ->
-            this?.clear()
+            clear()
             // adding a marker for the rider
-            val markerOptions = MarkerOptions()
+            val riderMarkerOptions = MarkerOptions()
                 .position(riderLoc)
                 .title("Current Location")
-            this?.addMarker(markerOptions)
+            addMarker(riderMarkerOptions)
             // adding a marker for the driver
-            val driverMarkerOpt = MarkerOptions()
+            val driverMarkerOptions = MarkerOptions()
                 .position(driverLoc)
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
                 .title("Driver's Location")
-            this?.addMarker(driverMarkerOpt)
+            addMarker(driverMarkerOptions)
             // constructing a bound to fit two points on the map
             val bounds = LatLngBounds.Builder()
                 .include(riderLoc)
                 .include(driverLoc)
                 .build()
-            map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
+
+            // adding a polyline between these two points
+            val polylineOptions = PolylineOptions()
+                .add(driverLoc)
+                .add(riderLoc)
+                .width(5f)
+                .color(Color.BLACK)
+            addPolyline(polylineOptions)
+
+            animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
                 TaxiConstants.MAP_ANIMATION_DURATION, null)
         }
     }
 
     private fun GoogleMap?.updateCurrentLocationMarker(latLng: LatLng) {
         // if there are any driver updates, ignore this logic and use the above function to update the marker.
-        if(mRiderViewModel.mDriverUpdatesLV.value != null) return
+        mRiderViewModel.mDriverUpdatesLV.value?.location?.let { return }
         this?.apply {
             // clearing the map
             clear()
@@ -215,10 +231,10 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates(boolean: Boolean = true) {
         if(boolean) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,TaxiConstants.LOCATION_INTERVAL)
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,TaxiConstants.LOCATION_INTERVAL_RIDER)
                 .setWaitForAccurateLocation(false)
-                .setMinUpdateIntervalMillis(TaxiConstants.LOCATION_FASTEST_INTERVAL)
-                .setMaxUpdateDelayMillis(TaxiConstants.LOCATION_MAX_WAIT_TIME)
+                .setMinUpdateIntervalMillis(TaxiConstants.LOCATION_FASTEST_INTERVAL_RIDER)
+                .setMaxUpdateDelayMillis(TaxiConstants.LOCATION_MAX_WAIT_TIME_RIDER)
                 .build()
             fusedLocationProviderClient.requestLocationUpdates(
                 locationRequest,

@@ -187,11 +187,7 @@ class DriverViewModel@Inject constructor(
             val loc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
             driverDetailsRef.child(DB_DRIVER_LOCATION).setValue(loc)
         }else{
-            Log.e(
-                TAG,
-                "updateDriverLocationInOngoingReqToFirebase: Failed to update the driver location onto FB as the request isn't accepted yet",
-                
-            )
+            Log.e(TAG,"updateDriverLocationInOngoingReqToFirebase: Failed to update the driver location onto FB",)
         }
     }
 

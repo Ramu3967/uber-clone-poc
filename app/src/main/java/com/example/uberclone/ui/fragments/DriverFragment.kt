@@ -115,7 +115,7 @@ class DriverFragment: Fragment() {
 
         mDriverViewModel.mNavigationLV.observe(viewLifecycleOwner){
             it?.let {destination ->
-                startNavigation(src = mLastLatLng!!, des = destination)
+//                startNavigation(src = mLastLatLng!!, des = destination)
             }
         }
     }

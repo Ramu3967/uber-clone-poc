@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.example.uberclone.utils.DriverUpdates
 import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
@@ -12,7 +13,12 @@ import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
+import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DELIMITER
+import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MAX
+import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MIN
+import com.example.uberclone.utils.TaxiConstants.DIST_NEAR_BY
+import com.example.uberclone.utils.TaxiConstants.calculateDistance
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -34,12 +40,16 @@ class RiderViewModel@Inject constructor(
     val mRequestStateLV: LiveData<Boolean?>
         get() = _mRequestStateLV
 
-    var mDriverUpdatesLV : MutableLiveData<LatLng?> = MutableLiveData(null)
+    var mDriverUpdatesLV = MutableLiveData(DriverUpdates())
+
 
     private var mActiveReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
-    private var acceptedDriverDbRef: DatabaseReference? = null
+    private var mAcceptedDriverDbRef: DatabaseReference? = null
+    private var mRiderLocation: LatLng? = null
 
+    private var isRiderFirstNotification = false
+    private var driverNearbyMessageSent = false
 
     private val mActiveReqListener = object : ValueEventListener{
         override fun onDataChange(activeReqSnapshot: DataSnapshot) {
@@ -77,13 +87,16 @@ class RiderViewModel@Inject constructor(
         mOngoingReqRef.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(ongoingReqSnapshot: DataSnapshot) {
 
-                val matchedReq = ongoingReqSnapshot.children.firstOrNull {
-                    it.child(DB_RIDER_DETAILS).child(DB_RIDER_ID)
-                        .getValue(String::class.java) == user.uid
+                val matchedDriverReq = ongoingReqSnapshot.children.firstOrNull {
+                    it.child(DB_RIDER_DETAILS).child(DB_RIDER_ID).getValue(String::class.java) == user.uid
                 }
 
-                matchedReq?.ref.let {
-                    acceptedDriverDbRef = it
+                matchedDriverReq?.let {
+                    // driver has accepted the request
+                    isRiderFirstNotification = true
+                    mAcceptedDriverDbRef = it.ref
+                    val (lat,lon) = it.child(DB_RIDER_DETAILS).child(DB_RIDER_LOCATION).getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
+                    mRiderLocation = LatLng(lat,lon)
                     setDriverDbLocationListener()
                 }
 
@@ -97,21 +110,40 @@ class RiderViewModel@Inject constructor(
         })
     }
 
+    private val driverLocationRefListener = object: ValueEventListener{
+        override fun onDataChange(snapshot: DataSnapshot) {
+            val (lat,lon) = snapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
+            val driverLocation = LatLng(lat,lon)
+            if(isRiderFirstNotification) {
+                mDriverUpdatesLV.value = DriverUpdates(location = driverLocation, msg = "The driver is on the way")
+                isRiderFirstNotification = false
+            }
+            else {
+                // todo: calculate distances and update the messages accordingly here - ex if the dist is <3KM notify the rider about the driver
+                val distanceRiderDriver = calculateDistance(mRiderLocation!!, driverLocation)
+                mDriverUpdatesLV.value = when{
+                    distanceRiderDriver in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX -> {  DriverUpdates(location = driverLocation, msg= null, driverReached = true)  }
+                    distanceRiderDriver < DIST_NEAR_BY  && !driverNearbyMessageSent-> {
+                        driverNearbyMessageSent = true
+                        DriverUpdates(location = driverLocation, msg = "Driver is nearby, please get ready to ride")
+                    }
+                    else -> {DriverUpdates(location = driverLocation, msg = null)}
+                }
+            }
+
+        }
+
+        override fun onCancelled(error: DatabaseError) {
+            Log.e(TAG, "onCancelled: failed to add eventListener ${error.message}", )
+            mDriverUpdatesLV.value = DriverUpdates()
+        }
+    }
+
     fun setDriverDbLocationListener(){
-        acceptedDriverDbRef?.let {
+        mAcceptedDriverDbRef?.let {
             val driverLocationRef = it.child(DB_DRIVER_DETAILS).child(DB_DRIVER_LOCATION)
-            driverLocationRef.addValueEventListener(object: ValueEventListener{
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val (lat,lon) = snapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
-                    mDriverUpdatesLV.value= LatLng(lat,lon)
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "onCancelled: failed to add eventListener ${error.message}", )
-                    mDriverUpdatesLV.value = null
-                }
-            })
-
+            driverLocationRef.addValueEventListener(driverLocationRefListener)
+            driverNearbyMessageSent = false
         } ?: Log.e(TAG, "setDriverSnapshotListener: no accepted driver found, so no listener was set")
     }
 
@@ -147,7 +179,14 @@ class RiderViewModel@Inject constructor(
     override fun onCleared() {
         super.onCleared()
         mActiveReqRef.removeEventListener(mActiveReqListener)
-        acceptedDriverDbRef = null
+        stopDriverUpdates()
+    }
+
+    fun stopDriverUpdates() {
+        mAcceptedDriverDbRef?.child(DB_DRIVER_DETAILS)?.child(DB_DRIVER_LOCATION)
+            ?.removeEventListener(driverLocationRefListener)
+        mAcceptedDriverDbRef = null
+        isRiderFirstNotification = false
     }
 
     companion object{
