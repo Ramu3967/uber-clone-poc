@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
 import com.example.uberclone.utils.TaxiConstants
@@ -34,6 +35,11 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.PolylineOptions
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.CancellationException
 import javax.inject.Inject
 
 
@@ -48,6 +54,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private var map: GoogleMap? = null
     private var mLastLatLng: LatLng? = null
     private var isRequestActive = false
+    private var routeJob: Job? = null
 
     @Inject
     lateinit var locationPermissions: Array<String>
@@ -133,37 +140,49 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
         }
     }
 
-    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run{
-
-        mLastLatLng?.let {riderLoc ->
-            clear()
-            // adding a marker for the rider
-            val riderMarkerOptions = MarkerOptions()
-                .position(riderLoc)
-                .title("Current Location")
-            addMarker(riderMarkerOptions)
-            // adding a marker for the driver
-            val driverMarkerOptions = MarkerOptions()
-                .position(driverLoc)
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
-                .title("Driver's Location")
-            addMarker(driverMarkerOptions)
-            // constructing a bound to fit two points on the map
-            val bounds = LatLngBounds.Builder()
-                .include(riderLoc)
-                .include(driverLoc)
-                .build()
-
-            // adding a polyline between these two points
-            val polylineOptions = PolylineOptions()
-                .add(driverLoc)
-                .add(riderLoc)
+    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run {
+        mLastLatLng?.let { riderLoc ->
+            routeJob?.cancel(CancellationException("new location incoming"))
+            val polylineOptions2 = PolylineOptions()
                 .width(5f)
                 .color(Color.BLACK)
-            addPolyline(polylineOptions)
 
-            animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
-                TaxiConstants.MAP_ANIMATION_DURATION, null)
+            routeJob = lifecycleScope.launch(Dispatchers.IO) {
+                val routePoints = mRiderViewModel.calculateRoute(driverLoc, riderLoc)
+                Log.d("RoutePoints", routePoints.toString())
+
+                polylineOptions2.addAll(routePoints)
+
+                withContext(Dispatchers.Main) {
+                    clear()
+                    // adding a marker for the rider
+                    val riderMarkerOptions = MarkerOptions()
+                        .position(riderLoc)
+                        .title("Current Location")
+                    addMarker(riderMarkerOptions)
+
+                    // adding a marker for the driver
+                    val driverMarkerOptions = MarkerOptions()
+                        .position(driverLoc)
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
+                        .title("Driver's Location")
+                    addMarker(driverMarkerOptions)
+
+                    // Adding the polyline
+                    addPolyline(polylineOptions2)
+
+                    val bounds = LatLngBounds.Builder()
+                        .include(riderLoc)
+                        .include(driverLoc)
+                        .build()
+
+                    animateCamera(
+                        CameraUpdateFactory.newLatLngBounds(bounds, 150),
+                        TaxiConstants.MAP_ANIMATION_DURATION,
+                        null
+                    )
+                }
+            }
         }
     }
 
@@ -187,6 +206,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
         super.onDestroyView()
         _binding = null
         mLastLatLng = null
+        routeJob = null
         requestLocationUpdates(false)
     }
 

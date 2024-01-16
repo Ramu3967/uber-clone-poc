@@ -51,7 +51,7 @@ object TaxiConstants  {
     private const val EARTH_RADIUS = 6371.0
     const val DIST_NEAR_BY= 3.0
     const val DIST_ARRIVAL_MIN = 0.0
-    const val DIST_ARRIVAL_MAX = 0.15
+    const val DIST_ARRIVAL_MAX = 0.1
 
     // Function to calculate distance using Haversine formula
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

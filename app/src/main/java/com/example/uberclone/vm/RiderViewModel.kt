@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.example.uberclone.network.IOSRMApiService
 import com.example.uberclone.utils.DriverUpdates
 import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
@@ -50,6 +51,9 @@ class RiderViewModel@Inject constructor(
 
     private var isRiderFirstNotification = false
     private var driverNearbyMessageSent = false
+
+    @Inject
+    lateinit var api: IOSRMApiService
 
     private val mActiveReqListener = object : ValueEventListener{
         override fun onDataChange(activeReqSnapshot: DataSnapshot) {
@@ -145,6 +149,27 @@ class RiderViewModel@Inject constructor(
             driverLocationRef.addValueEventListener(driverLocationRefListener)
             driverNearbyMessageSent = false
         } ?: Log.e(TAG, "setDriverSnapshotListener: no accepted driver found, so no listener was set")
+    }
+
+    suspend fun calculateRoute(source: LatLng, destination: LatLng) : List<LatLng>{
+        // osrm accepts lon first then the lat
+        val coordinates = "${source.longitude},${source.latitude};${destination.longitude},${destination.latitude}"
+        val routeLatLng = mutableListOf<LatLng>()
+        api.getRoutes(coordinates).let { result ->
+            if(result.code() == 200){
+                val osrmResponse = result.body()
+                osrmResponse?.let {
+                    if(it.code == "Ok"){
+                        // assuming only one route
+                        it.routes.first().geometry.coordinates.forEach{latlng ->
+                            val (lon,lat) = latlng
+                            routeLatLng.add(LatLng(lat,lon))
+                        }
+                    }
+                }
+            }
+        }
+        return routeLatLng
     }
 
     init {
