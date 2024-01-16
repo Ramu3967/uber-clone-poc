@@ -3,6 +3,7 @@ package com.example.uberclone.ui.fragments
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
@@ -15,8 +16,10 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
+import com.example.uberclone.utils.TaxiConstants
 import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -26,9 +29,17 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.CancellationException
 import javax.inject.Inject
 
 
@@ -43,6 +54,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private var map: GoogleMap? = null
     private var mLastLatLng: LatLng? = null
     private var isRequestActive = false
+    private var routeJob: Job? = null
 
     @Inject
     lateinit var locationPermissions: Array<String>
@@ -64,7 +76,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             super.onLocationResult(result)
-            Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}")
+            Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
@@ -72,8 +84,6 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             }
         }
     }
-
-
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -117,12 +127,68 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             if(it == false) binding.btnCallTaxi.text = "Call Taxi"
             else  binding.btnCallTaxi.text = "Cancel Taxi"
             // TODO: resolve the loader here and enable the button
+        }
 
+        mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){ driverUpdate ->
+            val (driverLocation, notificationMsg,driverReached) = driverUpdate
+            driverLocation?.let {  map?.updateDriverLocation(it) }
+            notificationMsg?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
+            if(driverReached) {
+                Toast.makeText(requireContext(), "Your driver has arrived", Toast.LENGTH_SHORT).show()
+                mRiderViewModel.stopDriverUpdates()
+            }
+        }
+    }
 
+    private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run {
+        mLastLatLng?.let { riderLoc ->
+            routeJob?.cancel(CancellationException("new location incoming"))
+            val polylineOptions2 = PolylineOptions()
+                .width(5f)
+                .color(Color.BLACK)
+
+            routeJob = lifecycleScope.launch(Dispatchers.IO) {
+                val routePoints = mRiderViewModel.calculateRoute(driverLoc, riderLoc)
+                Log.d("RoutePoints", routePoints.toString())
+
+                polylineOptions2.addAll(routePoints)
+
+                withContext(Dispatchers.Main) {
+                    clear()
+                    // adding a marker for the rider
+                    val riderMarkerOptions = MarkerOptions()
+                        .position(riderLoc)
+                        .title("Current Location")
+                    addMarker(riderMarkerOptions)
+
+                    // adding a marker for the driver
+                    val driverMarkerOptions = MarkerOptions()
+                        .position(driverLoc)
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
+                        .title("Driver's Location")
+                    addMarker(driverMarkerOptions)
+
+                    // Adding the polyline
+                    addPolyline(polylineOptions2)
+
+                    val bounds = LatLngBounds.Builder()
+                        .include(riderLoc)
+                        .include(driverLoc)
+                        .build()
+
+                    animateCamera(
+                        CameraUpdateFactory.newLatLngBounds(bounds, 150),
+                        TaxiConstants.MAP_ANIMATION_DURATION,
+                        null
+                    )
+                }
+            }
         }
     }
 
     private fun GoogleMap?.updateCurrentLocationMarker(latLng: LatLng) {
+        // if there are any driver updates, ignore this logic and use the above function to update the marker.
+        mRiderViewModel.mDriverUpdatesLV.value?.location?.let { return }
         this?.apply {
             // clearing the map
             clear()
@@ -140,6 +206,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
         super.onDestroyView()
         _binding = null
         mLastLatLng = null
+        routeJob = null
         requestLocationUpdates(false)
     }
 
@@ -184,10 +251,10 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates(boolean: Boolean = true) {
         if(boolean) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,TaxiConstants.LOCATION_INTERVAL_RIDER)
                 .setWaitForAccurateLocation(false)
-                .setMinUpdateIntervalMillis(20000)
-                .setMaxUpdateDelayMillis(30000)
+                .setMinUpdateIntervalMillis(TaxiConstants.LOCATION_FASTEST_INTERVAL_RIDER)
+                .setMaxUpdateDelayMillis(TaxiConstants.LOCATION_MAX_WAIT_TIME_RIDER)
                 .build()
             fusedLocationProviderClient.requestLocationUpdates(
                 locationRequest,

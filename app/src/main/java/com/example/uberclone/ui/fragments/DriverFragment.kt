@@ -1,19 +1,26 @@
 package com.example.uberclone.ui.fragments
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.uberclone.databinding.FragmentDriverBinding
-import com.example.uberclone.ui.adapters.RequestsAdapter
+import com.example.uberclone.ui.adapters.DriverRequestsAdapter
+import com.example.uberclone.utils.TaxiConstants.LOCATION_FASTEST_INTERVAL
+import com.example.uberclone.utils.TaxiConstants.LOCATION_INTERVAL
+import com.example.uberclone.utils.TaxiConstants.LOCATION_MAX_WAIT_TIME
 import com.example.uberclone.utils.TaxiConstants.MAP_ANIMATION_DURATION
 import com.example.uberclone.utils.TaxiRequest
 import com.example.uberclone.vm.DriverViewModel
@@ -43,13 +50,17 @@ class DriverFragment: Fragment() {
 
     private var map: GoogleMap? = null
     private var mLastLatLng: LatLng? = null
+    private var mLastSelectedRequest: TaxiRequest? = null
+
     private val mRequestAdapter by lazy{
-        RequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){des ->
-            addDestinationAndAdjustMap(mLastLatLng!!, des)
+        DriverRequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){ selectedTaxiRequest ->
+            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.location)
+            mLastSelectedRequest = selectedTaxiRequest
         }
     }
 
-    private var desMarker: Marker? = null
+    private var mRiderMarker: Marker? = null
+    private var mDriverMarker: Marker? = null
 
     private var mActiveRequests: List<TaxiRequest> = emptyList()
 
@@ -62,12 +73,14 @@ class DriverFragment: Fragment() {
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             super.onLocationResult(result)
-            Log.d(RiderFragment.TAG, "onLocationResult: ${result.locations.last().latitude}")
+            Log.d(RiderFragment.TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
                 mDriverViewModel.listenForDbChanges()
                 map?.updateCurrentLocationMarker(lastKnownLatLng)
+                // update driver location on firebase
+                mDriverViewModel.updateDriverLocationInOngoingReqToFirebase(driverLocation = mLastLatLng!!)
             }
         }
     }
@@ -94,6 +107,16 @@ class DriverFragment: Fragment() {
             mLastLatLng?.let {
                 mRequestAdapter.submitList(mActiveRequests, mLastLatLng)
             }
+            mActiveRequests.isNotEmpty().let {
+                binding.btnAcceptRequest.isVisible = it
+                if(!it) mLastSelectedRequest = null
+            }
+        }
+
+        mDriverViewModel.mNavigationLV.observe(viewLifecycleOwner){
+            it?.let {destination ->
+//                startNavigation(src = mLastLatLng!!, des = destination)
+            }
         }
     }
 
@@ -108,15 +131,16 @@ class DriverFragment: Fragment() {
             adapter = mRequestAdapter
             layoutManager = LinearLayoutManager(requireContext(), RecyclerView.VERTICAL,false)
         }
+        binding.btnAcceptRequest.setOnClickListener { acceptTaxiRequest() }
     }
 
     @SuppressLint("MissingPermission")
     private fun requestLocationUpdates(boolean: Boolean = true) {
         if(boolean) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL)
                 .setWaitForAccurateLocation(false)
-                .setMinUpdateIntervalMillis(20000)
-                .setMaxUpdateDelayMillis(30000)
+                .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL)
+                .setMaxUpdateDelayMillis(LOCATION_MAX_WAIT_TIME)
                 .build()
             fusedLocationProviderClient.requestLocationUpdates(
                 locationRequest,
@@ -126,17 +150,24 @@ class DriverFragment: Fragment() {
         } else fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun addDestinationAndAdjustMap(src: LatLng, des: LatLng){
-        desMarker?.remove()
+    private fun addDestinationAndAdjustMap(driverLocation: LatLng, riderLocation: LatLng){
+        mRiderMarker?.remove()
         val newMarkerOptions = MarkerOptions()
-            .position(des)
+            .position(riderLocation)
             .title("Rider's Location")
-        desMarker = map?.addMarker(newMarkerOptions)
+        mRiderMarker = map?.addMarker(newMarkerOptions)
+
+        mDriverMarker?.remove()
+        val markerOptions = MarkerOptions()
+            .position(driverLocation)
+            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
+            .title("Current Location")
+        mDriverMarker = map?.addMarker(markerOptions)
 
         // constructing a bound to fit two points on the map
         val bounds = LatLngBounds.Builder()
-            .include(src)
-            .include(des)
+            .include(driverLocation)
+            .include(riderLocation)
             .build()
         // moving the camera
         map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
@@ -144,8 +175,8 @@ class DriverFragment: Fragment() {
     }
 
     private fun GoogleMap?.updateCurrentLocationMarker(driverLocation: LatLng) {
-        desMarker?.let {
-            addDestinationAndAdjustMap(src = driverLocation, des = it.position)
+        mRiderMarker?.let {
+            addDestinationAndAdjustMap(driverLocation = driverLocation, riderLocation = it.position)
         } ?: kotlin.run {
             // clearing the map
             this?.clear()
@@ -154,28 +185,44 @@ class DriverFragment: Fragment() {
                 .position(driverLocation)
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
                 .title("Current Location")
-            this?.addMarker(markerOptions)
+            mDriverMarker = this?.addMarker(markerOptions)
             // move the camera to the current location
             this?.moveCamera(CameraUpdateFactory.newLatLngZoom(driverLocation, 15f))
         }
-
-//        this?.apply {
-//            // clearing the map
-//            clear()
-//            // adding a marker for the current location
-//            val markerOptions = MarkerOptions()
-//                .position(latLng)
-//                .title("Current Location")
-//            addMarker(markerOptions)
-//            // move the camera to the current location
-//            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
-//        }
     }
+
+    private fun acceptTaxiRequest(){
+        mLastSelectedRequest?.let {
+            mDriverViewModel.acceptTaxiRequest(it, driverLocation = mLastLatLng!!)
+        } ?: Toast.makeText(requireContext(),"unable to accept this request", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startNavigation(src:LatLng, des: LatLng) {
+        // Create a URI for the source and destination locations
+        val uri = "http://maps.google.com/maps?saddr=${src.latitude},${src.longitude}&daddr=${des.latitude},${des.longitude}"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+
+        // Specify the package to ensure that the intent is handled by Google Maps
+        intent.setPackage("com.google.android.apps.maps")
+
+        // Check if there's an app available to handle the intent
+        if (intent.resolveActivity(requireActivity().packageManager) != null) {
+            startActivity(intent)
+        } else {
+            // If Google Maps is not installed, you can handle this case or prompt the user to install it
+            // Alternatively, you can use a different navigation app
+            Toast.makeText(requireContext(), "Google Maps app not installed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
         mLastLatLng = null
+        mLastSelectedRequest = null
+        mDriverMarker = null
+        mRiderMarker = null
         requestLocationUpdates(false)
     }
 
