@@ -80,6 +80,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             result.lastLocation?.let { location ->
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
+                mRiderViewModel.listenForDbChanges()
                 map?.updateCurrentLocationMarker(lastKnownLatLng)
             }
         }
@@ -142,7 +143,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
 
     private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run {
         mLastLatLng?.let { riderLoc ->
-            routeJob?.cancel(CancellationException("new location incoming"))
+            routeJob?.cancel(CancellationException("new route incoming"))
             val polylineOptions2 = PolylineOptions()
                 .width(5f)
                 .color(Color.BLACK)
@@ -263,7 +264,6 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             )
         } else fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
-
 
     companion object{
         const val TAG = "my#RiderFragment"

@@ -3,10 +3,10 @@ package com.example.uberclone.vm
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_DRIVER
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_HOME
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS.DIR_RIDER
+import com.example.uberclone.utils.HomeScreenDirections
+import com.example.uberclone.utils.HomeScreenDirections.DIR_DRIVER
+import com.example.uberclone.utils.HomeScreenDirections.DIR_HOME
+import com.example.uberclone.utils.HomeScreenDirections.DIR_RIDER
 import com.example.uberclone.utils.TaxiConstants.EMAIL
 import com.example.uberclone.utils.TaxiConstants.RIDER
 import com.example.uberclone.utils.TaxiConstants.USERS
@@ -118,7 +118,7 @@ class SharedViewModel @Inject constructor(
         })
     }
 
-    private fun setRedirectDirection(direction: HOMESCREENDIRECTIONS) { mHomeRedirectLV.value = direction }
+    private fun setRedirectDirection(direction: HomeScreenDirections) { mHomeRedirectLV.value = direction }
 
     fun logoutUser(){
         auth.signOut()

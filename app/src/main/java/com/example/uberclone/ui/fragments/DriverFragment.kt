@@ -54,7 +54,8 @@ class DriverFragment: Fragment() {
 
     private val mRequestAdapter by lazy{
         DriverRequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){ selectedTaxiRequest ->
-            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.location)
+            // take care of end Location (needed when destination ride starts)
+            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.startLocation)
             mLastSelectedRequest = selectedTaxiRequest
         }
     }

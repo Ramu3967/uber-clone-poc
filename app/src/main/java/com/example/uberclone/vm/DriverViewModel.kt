@@ -50,8 +50,8 @@ class DriverViewModel@Inject constructor(
             Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
             if (snapshot.exists()) {
                 val results = mutableListOf<TaxiRequest>()
-                for (requestSnapshot in snapshot.children) {
-                    results.add(TaxiRequest.fromActiveReqSnapshot(requestSnapshot))
+                for (uidSnapshot in snapshot.children) {
+                    results.add(TaxiRequest.fromActiveReqSnapshot(uidSnapshot))
                 }
                 _mUserRequestsLV.value= results
             } else {
@@ -134,7 +134,7 @@ class DriverViewModel@Inject constructor(
         auth.currentUser?.let {driver ->
             val riderId = taxiRequest.uid
             val driverId = driver.uid
-            val riderLocation = taxiRequest.location
+            val riderLocation = taxiRequest.startLocation
             saveOngoingRequests(driverId, driverLocation, riderId, riderLocation)
         }
     }
@@ -143,6 +143,7 @@ class DriverViewModel@Inject constructor(
         val ongoingReqRef = mOngoingReqRef.child(driverId)
         val driverRef = ongoingReqRef.child(DB_DRIVER_DETAILS)
         val dLoc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
+
         driverRef.child(DB_DRIVER_LOCATION).setValue(dLoc)
         driverRef.child(DB_ACCEPTED_AT).setValue(System.currentTimeMillis())
         val riderRef = ongoingReqRef.child(DB_RIDER_DETAILS)
@@ -157,7 +158,7 @@ class DriverViewModel@Inject constructor(
         if(!isListeningForDb) {
             isListeningForDb = true
             val dbRef = database.reference
-            mActiveReqRef = dbRef.child(TaxiConstants.DB_ACTIVE_REQUESTS)
+            mActiveReqRef = dbRef.child(TaxiConstants.DB_RIDER_REQUESTS)
             mActiveReqRef.addValueEventListener(mActiveReqDbListener)
 
             mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS)

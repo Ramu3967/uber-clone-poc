@@ -21,11 +21,16 @@ object TaxiConstants  {
     const val LOCATION_MAX_WAIT_TIME_RIDER = 20000L
 
     // FB details for the active requests node - rider
-    const val DB_ACTIVE_REQUESTS = "activeRequests"
-    const val DB_LOCATION = "location"
+    const val DB_RIDER_REQUESTS = "riderRequests"
+    const val DB_START_LOCATION = "startLocation"
+    const val DB_END_LOCATION = "endLocation"
     const val DB_LATITUDE = "latitude"
     const val DB_LONGITUDE = "longitude"
     const val DB_REQUESTED_AT = "requestedAt"
+    const val DB_RIDE_STATUS = "rideStatus"
+    const val DB_DRIVER_ID = "driverId"
+    const val DB_EMPTY_FIELD = "empty"
+
 
     // FB details for the ongoing requests node - driver
     const val DB_ONGOING_REQUESTS = "ongoingRequests"
@@ -73,6 +78,17 @@ object TaxiConstants  {
     }
 }
 
-enum class HOMESCREENDIRECTIONS{
+enum class HomeScreenDirections{
     DIR_HOME, DIR_RIDER, DIR_DRIVER
+}
+
+enum class RideStatus{
+    PENDING, EN_ROUTE, FINISHED, CANCELLED_ONGOING_RIDE
+}
+
+sealed class RiS{
+    object Pending: RiS()
+    object EnRoute: RiS()
+    object Finished: RiS()
+    class CancelledOngoingRide(val msg: String): RiS()
 }

@@ -6,15 +6,20 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.uberclone.network.IOSRMApiService
 import com.example.uberclone.utils.DriverUpdates
-import com.example.uberclone.utils.TaxiConstants.DB_ACTIVE_REQUESTS
+import com.example.uberclone.utils.RideStatus
+import com.example.uberclone.utils.TaxiConstants.DB_RIDER_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
+import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
-import com.example.uberclone.utils.TaxiConstants.DB_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_EMPTY_FIELD
+import com.example.uberclone.utils.TaxiConstants.DB_END_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_START_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_RIDE_STATUS
 import com.example.uberclone.utils.TaxiConstants.DELIMITER
 import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MAX
 import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MIN
@@ -44,13 +49,15 @@ class RiderViewModel@Inject constructor(
     var mDriverUpdatesLV = MutableLiveData(DriverUpdates())
 
 
-    private var mActiveReqRef: DatabaseReference
+    private lateinit var mActiveReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
     private var mAcceptedDriverDbRef: DatabaseReference? = null
     private var mRiderLocation: LatLng? = null
 
     private var isRiderFirstNotification = false
     private var driverNearbyMessageSent = false
+
+    private var isListeningForDb = false
 
     @Inject
     lateinit var api: IOSRMApiService
@@ -103,7 +110,7 @@ class RiderViewModel@Inject constructor(
                     mRiderLocation = LatLng(lat,lon)
                     setDriverDbLocationListener()
                 }
-
+    // todo move this out of the function block
                 mOngoingReqRef.removeEventListener(this)
             }
 
@@ -172,30 +179,38 @@ class RiderViewModel@Inject constructor(
         return routeLatLng
     }
 
-    init {
-        val dbRef = database.reference
-        mActiveReqRef = dbRef.child(DB_ACTIVE_REQUESTS)
-        mActiveReqRef.addValueEventListener(mActiveReqListener)
+    fun listenForDbChanges(){
+        if(!isListeningForDb) {
+            isListeningForDb = true
+            val dbRef = database.reference
+            mActiveReqRef = dbRef.child(DB_RIDER_REQUESTS)
+            mActiveReqRef.addValueEventListener(mActiveReqListener)
 
-        mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS) // what if there's no ongoing req, how'd you search for the rider id?
+            mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS) // what if there's no ongoing req, how'd you search for the rider id?
+        }
     }
 
-    fun sendTaxiRequest(latLng: LatLng){
+    fun sendTaxiRequest(startLocation: LatLng, endLocation: LatLng = LatLng(43.79731053924396, -79.33019465971456)){
         auth.currentUser?.let {user ->
             val dbRef = database.reference
-            val activeReqRef = dbRef.child(DB_ACTIVE_REQUESTS).child(user.uid)
-
-            val loc = "${latLng.latitude}${DELIMITER}${latLng.longitude}"
-            activeReqRef.child(DB_LOCATION).setValue(loc)
-            activeReqRef.child(DB_REQUESTED_AT).setValue(System.currentTimeMillis())
-
+            val activeReqRef = dbRef.child(DB_RIDER_REQUESTS).child(user.uid)
+            val sLoc = "${startLocation.latitude}${DELIMITER}${startLocation.longitude}"
+            val dLoc = "${endLocation.latitude}${DELIMITER}${endLocation.longitude}"
+            val rideData = mapOf(
+                DB_START_LOCATION to sLoc,
+                DB_END_LOCATION to dLoc,
+                DB_REQUESTED_AT to System.currentTimeMillis(),
+                DB_RIDE_STATUS to RideStatus.PENDING.name,
+                DB_DRIVER_ID to DB_EMPTY_FIELD
+            )
+            activeReqRef.updateChildren(rideData)
         } ?: Log.d(TAG,"taxiRequest: unable to send req as there's no user available")
     }
 
     fun cancelTaxiRequest(){
         auth.currentUser?.let { user ->
             val dbRef = database.reference
-            val activeReqRef = dbRef.child(DB_ACTIVE_REQUESTS).child(user.uid)
+            val activeReqRef = dbRef.child(DB_RIDER_REQUESTS).child(user.uid)
             activeReqRef.removeValue()
         }
         Log.d(TAG, "cancelTaxiRequest: taxi cancelled")
@@ -203,8 +218,9 @@ class RiderViewModel@Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        mActiveReqRef.removeEventListener(mActiveReqListener)
+        if(::mActiveReqRef.isInitialized) mActiveReqRef.removeEventListener(mActiveReqListener)
         stopDriverUpdates()
+        isListeningForDb = false
     }
 
     fun stopDriverUpdates() {
