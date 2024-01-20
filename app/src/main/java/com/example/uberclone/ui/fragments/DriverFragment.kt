@@ -153,17 +153,17 @@ class DriverFragment: Fragment() {
 
     private fun addDestinationAndAdjustMap(driverLocation: LatLng, riderLocation: LatLng){
         mRiderMarker?.remove()
-        val newMarkerOptions = MarkerOptions()
+        val riderMarkerOptions = MarkerOptions()
             .position(riderLocation)
             .title("Rider's Location")
-        mRiderMarker = map?.addMarker(newMarkerOptions)
+        mRiderMarker = map?.addMarker(riderMarkerOptions)
 
         mDriverMarker?.remove()
-        val markerOptions = MarkerOptions()
+        val driverMarkerOptions = MarkerOptions()
             .position(driverLocation)
             .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
             .title("Current Location")
-        mDriverMarker = map?.addMarker(markerOptions)
+        mDriverMarker = map?.addMarker(driverMarkerOptions)
 
         // constructing a bound to fit two points on the map
         val bounds = LatLngBounds.Builder()
@@ -177,6 +177,7 @@ class DriverFragment: Fragment() {
 
     private fun GoogleMap?.updateCurrentLocationMarker(driverLocation: LatLng) {
         mRiderMarker?.let {
+            // don't make api call when the driver's position isn't changed much from the previous know location
             addDestinationAndAdjustMap(driverLocation = driverLocation, riderLocation = it.position)
         } ?: kotlin.run {
             // clearing the map

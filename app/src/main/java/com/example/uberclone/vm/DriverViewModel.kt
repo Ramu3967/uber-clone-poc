@@ -4,18 +4,24 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.example.uberclone.utils.TaxiConstants
+import com.example.uberclone.utils.RideStatus
 import com.example.uberclone.utils.TaxiConstants.DB_ACCEPTED_AT
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_DETAILS
+import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_END_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_RIDER_REQUESTS
+import com.example.uberclone.utils.TaxiConstants.DB_RIDE_STATUS
+import com.example.uberclone.utils.TaxiConstants.DB_START_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DELIMITER
 import com.example.uberclone.utils.TaxiRequest
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -132,41 +138,56 @@ class DriverViewModel@Inject constructor(
      */
     fun acceptTaxiRequest(taxiRequest: TaxiRequest, driverLocation: LatLng){
         auth.currentUser?.let {driver ->
-            val riderId = taxiRequest.uid
             val driverId = driver.uid
-            val riderLocation = taxiRequest.startLocation
-            saveOngoingRequests(driverId, driverLocation, riderId, riderLocation)
+            saveOngoingRequests(driverId, driverLocation, taxiRequest)
+            updateRiderRequest(driver, taxiRequest)
         }
     }
 
-    private fun saveOngoingRequests(driverId: String, driverLocation: LatLng, riderId: String, riderLocation: LatLng){
+    private fun saveOngoingRequests(driverId: String, driverLocation: LatLng, taxiRequest: TaxiRequest){
         val ongoingReqRef = mOngoingReqRef.child(driverId)
         val driverRef = ongoingReqRef.child(DB_DRIVER_DETAILS)
-        val dLoc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
-
-        driverRef.child(DB_DRIVER_LOCATION).setValue(dLoc)
-        driverRef.child(DB_ACCEPTED_AT).setValue(System.currentTimeMillis())
         val riderRef = ongoingReqRef.child(DB_RIDER_DETAILS)
-        riderRef.child(DB_RIDER_ID).setValue(riderId)
-        val rLoc = "${riderLocation.latitude}$DELIMITER${riderLocation.longitude}"
-        riderRef.child(DB_RIDER_LOCATION).setValue(rLoc)
+
+        val dLoc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
+        val riderStartLoc = "${taxiRequest.startLocation.latitude}$DELIMITER${taxiRequest.startLocation.longitude}"
+        val riderEndLoc = "${taxiRequest.endLocation.latitude}$DELIMITER${taxiRequest.endLocation.longitude}"
+
+        val updates = mapOf(
+            "${driverRef.key}/$DB_DRIVER_LOCATION" to dLoc,
+            "${driverRef.key}/$DB_ACCEPTED_AT" to System.currentTimeMillis(),
+            "${riderRef.key}/$DB_RIDER_ID" to taxiRequest.uid,
+            "${riderRef.key}/$DB_START_LOCATION" to riderStartLoc,
+            "${riderRef.key}/$DB_END_LOCATION" to riderEndLoc
+        )
+
+        mOngoingReqRef.child(driverId).updateChildren(updates)
 
         isRequestAccepted = true
+    }
+
+    private fun updateRiderRequest(driver: FirebaseUser, taxiRequest: TaxiRequest) {
+        val riderRequestRef = database.reference.child("$DB_RIDER_REQUESTS/${taxiRequest.uid}")
+        val children = mapOf(
+            DB_DRIVER_ID to driver.uid,
+            DB_RIDE_STATUS to RideStatus.EN_ROUTE
+        )
+        riderRequestRef.updateChildren(children)
     }
 
     fun listenForDbChanges(){
         if(!isListeningForDb) {
             isListeningForDb = true
             val dbRef = database.reference
-            mActiveReqRef = dbRef.child(TaxiConstants.DB_RIDER_REQUESTS)
+            mActiveReqRef = dbRef.child(DB_RIDER_REQUESTS)
             mActiveReqRef.addValueEventListener(mActiveReqDbListener)
 
             mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS)
-            mOngoingReqRef.addValueEventListener(mOngoingReqDbListener)
+//            mOngoingReqRef.addValueEventListener(mOngoingReqDbListener)
 
             // exclude the parent from listening to this child when you update the driver location for the associated rider
-            val mDriverDetailsRef = mOngoingReqRef.child(auth.currentUser?.uid!!).child(DB_DRIVER_DETAILS)
-            mDriverDetailsRef.removeEventListener(mOngoingReqDbListener)
+//            val mDriverDetailsRef = mOngoingReqRef.child(auth.currentUser?.uid!!).child(DB_DRIVER_DETAILS)
+//            mDriverDetailsRef.removeEventListener(mOngoingReqDbListener)
         }
     }
 
@@ -175,7 +196,7 @@ class DriverViewModel@Inject constructor(
     override fun onCleared() {
         super.onCleared()
         if(::mActiveReqRef.isInitialized) mActiveReqRef.removeEventListener(mActiveReqDbListener)
-        if(::mOngoingReqRef.isInitialized) mOngoingReqRef.removeEventListener(mOngoingReqDbListener)
+//        if(::mOngoingReqRef.isInitialized) mOngoingReqRef.removeEventListener(mOngoingReqDbListener)
         isListeningForDb = false
         isRequestAccepted = false
     }
@@ -188,7 +209,7 @@ class DriverViewModel@Inject constructor(
             val loc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
             driverDetailsRef.child(DB_DRIVER_LOCATION).setValue(loc)
         }else{
-            Log.e(TAG,"updateDriverLocationInOngoingReqToFirebase: Failed to update the driver location onto FB",)
+            Log.e(TAG,"updateDriverLocationInOngoingReqToFirebase: Driver didn't accept the request yet")
         }
     }
 

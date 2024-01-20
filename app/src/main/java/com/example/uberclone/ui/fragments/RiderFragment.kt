@@ -81,6 +81,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                 val lastKnownLatLng = LatLng(location.latitude, location.longitude)
                 mLastLatLng = lastKnownLatLng
                 mRiderViewModel.listenForDbChanges()
+                mRiderViewModel.setCurrentRiderLocation(lastKnownLatLng)
                 map?.updateCurrentLocationMarker(lastKnownLatLng)
             }
         }
@@ -143,8 +144,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
 
     private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run {
         mLastLatLng?.let { riderLoc ->
-            routeJob?.cancel(CancellationException("new route incoming"))
-            val polylineOptions2 = PolylineOptions()
+            val polylineOptions = PolylineOptions()
                 .width(5f)
                 .color(Color.BLACK)
 
@@ -152,7 +152,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                 val routePoints = mRiderViewModel.calculateRoute(driverLoc, riderLoc)
                 Log.d("RoutePoints", routePoints.toString())
 
-                polylineOptions2.addAll(routePoints)
+                polylineOptions.addAll(routePoints)
 
                 withContext(Dispatchers.Main) {
                     clear()
@@ -170,7 +170,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                     addMarker(driverMarkerOptions)
 
                     // Adding the polyline
-                    addPolyline(polylineOptions2)
+                    addPolyline(polylineOptions)
 
                     val bounds = LatLngBounds.Builder()
                         .include(riderLoc)
@@ -207,7 +207,6 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
         super.onDestroyView()
         _binding = null
         mLastLatLng = null
-        routeJob = null
         requestLocationUpdates(false)
     }
 
