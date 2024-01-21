@@ -15,9 +15,6 @@ import com.example.uberclone.utils.TaxiConstants.DB_END_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_START_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
-import com.example.uberclone.utils.TaxiConstants.DB_RIDER_DETAILS
-import com.example.uberclone.utils.TaxiConstants.DB_RIDER_ID
-import com.example.uberclone.utils.TaxiConstants.DB_RIDER_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_RIDE_STATUS
 import com.example.uberclone.utils.TaxiConstants.DELIMITER
 import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MAX
@@ -26,7 +23,6 @@ import com.example.uberclone.utils.TaxiConstants.DIST_NEAR_BY
 import com.example.uberclone.utils.TaxiConstants.calculateDistance
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -46,10 +42,11 @@ class RiderViewModel@Inject constructor(
 
     var mDriverUpdatesLV = MutableLiveData(DriverUpdates())
 
+    var mCurrentStateLV = MutableLiveData(RideStatus.PENDING)
 
-    private lateinit var mActiveReqRef: DatabaseReference
+    private var driverDbLocationRef: DatabaseReference? = null
+    private lateinit var mRiderReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
-    private var mAcceptedDriverDbRef: DatabaseReference? = null
     private var mStartRiderLocation: LatLng? = null
 
     private var isRiderFirstNotification = false
@@ -60,38 +57,6 @@ class RiderViewModel@Inject constructor(
     @Inject
     lateinit var api: IOSRMApiService
 
-    private val mActiveReqListener = object : ValueEventListener{
-        override fun onDataChange(activeReqSnapshot: DataSnapshot) {
-            Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
-            auth.currentUser?.let { user ->
-                if(activeReqSnapshot.exists()){
-                    val isReqExists = activeReqSnapshot.hasChild(user.uid)
-                    _mRequestStateLV.value = isReqExists
-                    // when an active req is deleted and could be found in onGoing Req -> Driver just accepted this req
-                    /*
-                     disable the 'call taxi' button and start updating the driver's location
-                      */
-                    if(isReqExists){
-                        Log.d(TAG, "onDataChange: Rider's request is still in activeRequests. No driver has confirmed it yet")
-                    }
-                    else{
-                        // search in ongoing requests
-                        checkRiderInOngoingRequests(user)
-                    }
-                }
-                else {
-                    _mRequestStateLV.value = false
-                    // case where the current rider's was the only one active request that got deleted by accepting the req by driver.
-                    checkRiderInOngoingRequests(user)
-                }
-            }
-        }
-
-        override fun onCancelled(error: DatabaseError) {
-            Log.d(TAG, "mActiveReqListener_onCancelled: data cancelled}")
-        }
-    }
-
     private val mRiderRequestListener = object : ValueEventListener{
         override fun onDataChange(riderReqSnapshot: DataSnapshot) {
             auth.currentUser?.let {user ->
@@ -100,22 +65,31 @@ class RiderViewModel@Inject constructor(
                 if(isReqExists){
                     val myRequest = riderReqSnapshot.child(user.uid)
                     val status = myRequest.child(DB_RIDE_STATUS).getValue(RideStatus::class.java) ?: RideStatus.PENDING
+                    mCurrentStateLV.value = status
                     when(status) {
-                        RideStatus.PENDING -> {}
+                        RideStatus.PENDING -> { }
                         RideStatus.EN_ROUTE -> {
                             // driver accepted the request, set up the listener on driver updates
                             val driverId = myRequest.child(DB_DRIVER_ID).getValue(String::class.java) ?: DB_EMPTY_FIELD
                             if(driverId != DB_EMPTY_FIELD){
-                                setDriverDbLocationListener2(driverId)
+                                setDriverDbLocationListener(driverId)
                             }else{
-                                Log.e(TAG, "onDataChange: Enroute but not driver Id was found")
+                                Log.e(TAG, "onDataChange: Enroute but driver Id was not found")
+                            }
+                        }
+                        RideStatus.EN_ROUTE_DEST -> {
+                            Log.d(TAG, "onDataChange: driver picked up the rider and is moving to rider's destination")
+                            val driverId = myRequest.child(DB_DRIVER_ID).getValue(String::class.java) ?: DB_EMPTY_FIELD
+                            if(driverId != DB_EMPTY_FIELD){
+                                // set up the listener for location updates
+                                setDriverDbLocationListener(driverId)
+                                // move your location with the driver and draw a polyline to the destination
+                            }else{
+                                Log.e(TAG, "onDataChange: Enroute to destination but  driver Id was not found")
                             }
                         }
                         RideStatus.FINISHED -> {}
                         RideStatus.CANCELLED_ONGOING_RIDE -> {}
-                        RideStatus.UNKNOWN -> {
-                            Log.d(TAG, "onDataChange: No active requests, do nothing")
-                        }
                     }
                 }else{
                     // moved to finished requests
@@ -129,89 +103,38 @@ class RiderViewModel@Inject constructor(
 
     }
 
-    private fun setDriverDbLocationListener2(driverId: String) {
-        val driverDbLocationRef = mOngoingReqRef.child("$driverId/$DB_DRIVER_DETAILS/$DB_DRIVER_LOCATION")
+    private fun setDriverDbLocationListener(driverId: String) {
+        driverDbLocationRef = mOngoingReqRef.child("$driverId/$DB_DRIVER_DETAILS/$DB_DRIVER_LOCATION")
         driverNearbyMessageSent = false
-        driverDbLocationRef.addValueEventListener(mDiverLocationRefListener2)
+        driverDbLocationRef?.addValueEventListener(mDiverLocationRefListener)
         // updates in this field by the driver shouldn't trigger the parent = ongoing requests listener.
-        mOngoingReqRef.removeEventListener(mDiverLocationRefListener2)
+        mOngoingReqRef.removeEventListener(mDiverLocationRefListener)
     }
 
-    private fun checkRiderInOngoingRequests(user: FirebaseUser) {
-        mOngoingReqRef.addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(ongoingReqSnapshot: DataSnapshot) {
-
-                val matchedDriverReq = ongoingReqSnapshot.children.firstOrNull {
-                    it.child(DB_RIDER_DETAILS).child(DB_RIDER_ID).getValue(String::class.java) == user.uid
-                }
-
-                matchedDriverReq?.let {
-                    // driver has accepted the request
-                    isRiderFirstNotification = true
-                    mAcceptedDriverDbRef = it.ref
-                    val (lat,lon) = it.child(DB_RIDER_DETAILS).child(DB_RIDER_LOCATION).getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
-                    mStartRiderLocation = LatLng(lat,lon)
-                    setDriverDbLocationListener()
-                }
-    // todo move this out of the function block
-                mOngoingReqRef.removeEventListener(this)
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "onCancelled: Rider has no requests ")
-            }
-
-        })
-    }
-
-    private val driverLocationRefListener = object: ValueEventListener{
+    private val mDiverLocationRefListener = object: ValueEventListener{
         override fun onDataChange(snapshot: DataSnapshot) {
             val (lat,lon) = snapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
             val driverLocation = LatLng(lat,lon)
-            if(isRiderFirstNotification) {
-                mDriverUpdatesLV.value = DriverUpdates(location = driverLocation, msg = "The driver is on the way")
-                isRiderFirstNotification = false
-            }
-            else {
-                // todo: calculate distances and update the messages accordingly here - ex if the dist is <3KM notify the rider about the driver
-                val distanceRiderDriver = calculateDistance(mStartRiderLocation!!, driverLocation)
-                mDriverUpdatesLV.value = when{
-                    distanceRiderDriver in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX -> {  DriverUpdates(location = driverLocation, msg= null, driverReached = true)  }
-                    distanceRiderDriver < DIST_NEAR_BY  && !driverNearbyMessageSent-> {
-                        driverNearbyMessageSent = true
-                        DriverUpdates(location = driverLocation, msg = "Driver is nearby, please get ready to ride")
+            if(mCurrentStateLV.value == RideStatus.EN_ROUTE){
+                if(isRiderFirstNotification) {
+                    mDriverUpdatesLV.value = DriverUpdates(location = driverLocation, msg = "The driver is on the way")
+                    isRiderFirstNotification = false
+                }
+                else {
+                    // todo: calculate distances and update the messages accordingly here - ex if the dist is <3KM notify the rider about the driver
+                    val distanceRiderDriver = calculateDistance(mStartRiderLocation!!, driverLocation)
+                    mDriverUpdatesLV.value = when{
+                        distanceRiderDriver in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX -> {  DriverUpdates(location = driverLocation, msg= null, driverReached = true)  }
+                        distanceRiderDriver < DIST_NEAR_BY  && !driverNearbyMessageSent-> {
+                            driverNearbyMessageSent = true
+                            DriverUpdates(location = driverLocation, msg = "Driver is nearby, please get ready to ride")
+                        }
+                        else -> {DriverUpdates(location = driverLocation, msg = null)}
                     }
-                    else -> {DriverUpdates(location = driverLocation, msg = null)}
                 }
             }
-
-        }
-
-        override fun onCancelled(error: DatabaseError) {
-            Log.e(TAG, "onCancelled: failed to add eventListener ${error.message}", )
-            mDriverUpdatesLV.value = DriverUpdates()
-        }
-    }
-
-    private val mDiverLocationRefListener2 = object: ValueEventListener{
-        override fun onDataChange(snapshot: DataSnapshot) {
-            val (lat,lon) = snapshot.getValue(String::class.java)!!.split(DELIMITER).map{ st -> st.toDouble() }
-            val driverLocation = LatLng(lat,lon)
-            if(isRiderFirstNotification) {
-                mDriverUpdatesLV.value = DriverUpdates(location = driverLocation, msg = "The driver is on the way")
-                isRiderFirstNotification = false
-            }
-            else {
-                // todo: calculate distances and update the messages accordingly here - ex if the dist is <3KM notify the rider about the driver
-                val distanceRiderDriver = calculateDistance(mStartRiderLocation!!, driverLocation)
-                mDriverUpdatesLV.value = when{
-                    distanceRiderDriver in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX -> {  DriverUpdates(location = driverLocation, msg= null, driverReached = true)  }
-                    distanceRiderDriver < DIST_NEAR_BY  && !driverNearbyMessageSent-> {
-                        driverNearbyMessageSent = true
-                        DriverUpdates(location = driverLocation, msg = "Driver is nearby, please get ready to ride")
-                    }
-                    else -> {DriverUpdates(location = driverLocation, msg = null)}
-                }
+            else if(mCurrentStateLV.value == RideStatus.EN_ROUTE_DEST){
+                mDriverUpdatesLV.value = DriverUpdates(location = driverLocation)
             }
 
         }
@@ -224,14 +147,6 @@ class RiderViewModel@Inject constructor(
 
     fun setCurrentRiderLocation(location: LatLng){
         mStartRiderLocation = location
-    }
-
-    fun setDriverDbLocationListener(){
-        mAcceptedDriverDbRef?.let {
-            val driverLocationRef = it.child(DB_DRIVER_DETAILS).child(DB_DRIVER_LOCATION)
-            driverLocationRef.addValueEventListener(driverLocationRefListener)
-            driverNearbyMessageSent = false
-        } ?: Log.e(TAG, "setDriverSnapshotListener: no accepted driver found, so no listener was set")
     }
 
     suspend fun calculateRoute(source: LatLng, destination: LatLng) : List<LatLng>{
@@ -260,9 +175,9 @@ class RiderViewModel@Inject constructor(
         if(!isListeningForDb) {
             isListeningForDb = true
             val dbRef = database.reference
-            mActiveReqRef = dbRef.child(DB_RIDER_REQUESTS)
+            mRiderReqRef = dbRef.child(DB_RIDER_REQUESTS)
 //            mActiveReqRef.addValueEventListener(mActiveReqListener)
-            mActiveReqRef.addValueEventListener(mRiderRequestListener)
+            mRiderReqRef.addValueEventListener(mRiderRequestListener)
 
             mOngoingReqRef = dbRef.child(DB_ONGOING_REQUESTS) // what if there's no ongoing req, how'd you search for the rider id?
         }
@@ -296,18 +211,15 @@ class RiderViewModel@Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-//        if(::mActiveReqRef.isInitialized) mActiveReqRef.removeEventListener(mActiveReqListener)
-        if(::mActiveReqRef.isInitialized) mActiveReqRef.removeEventListener(mRiderRequestListener)
+        if(::mRiderReqRef.isInitialized) mRiderReqRef.removeEventListener(mRiderRequestListener)
         stopDriverUpdates()
         isListeningForDb = false
     }
 
     fun stopDriverUpdates() {
-        mAcceptedDriverDbRef?.child(DB_DRIVER_DETAILS)?.child(DB_DRIVER_LOCATION)
-            ?.removeEventListener(driverLocationRefListener)
-        mAcceptedDriverDbRef = null
         isRiderFirstNotification = false
-
+        driverDbLocationRef?.removeEventListener(mDiverLocationRefListener)
+        driverDbLocationRef = null
     }
 
     companion object{

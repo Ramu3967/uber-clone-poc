@@ -81,7 +81,7 @@ enum class HomeScreenDirections{
 }
 
 enum class RideStatus{
-    PENDING, EN_ROUTE, FINISHED, CANCELLED_ONGOING_RIDE, UNKNOWN
+    PENDING, EN_ROUTE, FINISHED, CANCELLED_ONGOING_RIDE, EN_ROUTE_DEST
 }
 
 sealed class RiS{

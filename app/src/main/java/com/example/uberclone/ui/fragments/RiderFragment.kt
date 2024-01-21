@@ -19,6 +19,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
+import com.example.uberclone.utils.RideStatus
 import com.example.uberclone.utils.TaxiConstants
 import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
@@ -55,6 +56,11 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private var mLastLatLng: LatLng? = null
     private var isRequestActive = false
     private var routeJob: Job? = null
+    private var routeJobDestination: Job? = null
+    private var mCurrentState = RideStatus.PENDING
+
+    // static final destination location
+    private var mDestination = LatLng(43.79731053924396, -79.33019465971456)
 
     @Inject
     lateinit var locationPermissions: Array<String>
@@ -131,13 +137,29 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
             // TODO: resolve the loader here and enable the button
         }
 
+        mRiderViewModel.mCurrentStateLV.observe(viewLifecycleOwner){mCurrentState = it}
+
+        // will be converted to a view-state
         mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){ driverUpdate ->
             val (driverLocation, notificationMsg,driverReached) = driverUpdate
-            driverLocation?.let {  map?.updateDriverLocation(it) }
-            notificationMsg?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
-            if(driverReached) {
-                Toast.makeText(requireContext(), "Your driver has arrived", Toast.LENGTH_SHORT).show()
-                mRiderViewModel.stopDriverUpdates()
+            when(mCurrentState){
+                RideStatus.PENDING -> {
+                    // you don't get any updates when in this state
+                }
+                RideStatus.EN_ROUTE -> {
+                    driverLocation?.let {  map?.updateDriverLocation(it) }
+                    notificationMsg?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
+                    // reached rider's location
+                    if(driverReached) {
+                        Toast.makeText(requireContext(), "Your driver has arrived", Toast.LENGTH_SHORT).show()
+                        mRiderViewModel.stopDriverUpdates()
+                    }
+                }
+                RideStatus.EN_ROUTE_DEST -> {
+                    driverLocation?.let { map?.run { updateLocationEnRouteDestination(this, it) } }
+                }
+                RideStatus.CANCELLED_ONGOING_RIDE -> {}
+                RideStatus.FINISHED -> {}
             }
         }
     }
@@ -148,6 +170,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                 .width(5f)
                 .color(Color.BLACK)
 
+            routeJob?.cancel(CancellationException("new route incoming"))
             routeJob = lifecycleScope.launch(Dispatchers.IO) {
                 val routePoints = mRiderViewModel.calculateRoute(driverLoc, riderLoc)
                 Log.d("RoutePoints", routePoints.toString())
@@ -183,6 +206,49 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                         null
                     )
                 }
+            }
+        }
+    }
+
+    // club this operation with the above function
+    private fun updateLocationEnRouteDestination(map:GoogleMap, driverLoc: LatLng) {
+        routeJobDestination?.cancel(CancellationException("new route incoming"))
+        routeJobDestination = lifecycleScope.launch(Dispatchers.IO) {
+            val polylineOptions = PolylineOptions()
+                .width(5f)
+                .color(Color.BLACK)
+            val riderLoc = mDestination
+            val routePoints = mRiderViewModel.calculateRoute(driverLoc, riderLoc)
+            Log.d("RoutePoints", routePoints.toString())
+            polylineOptions.addAll(routePoints)
+            withContext(Dispatchers.Main) {
+                map.clear()
+                // adding a marker for the rider
+                val riderMarkerOptions = MarkerOptions()
+                    .position(riderLoc)
+                    .title("Destination")
+                map.addMarker(riderMarkerOptions)
+
+                // adding a marker for the driver
+                val driverMarkerOptions = MarkerOptions()
+                    .position(driverLoc)
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET))
+                    .title("Your Location")
+                map.addMarker(driverMarkerOptions)
+
+                // Adding the polyline
+                map.addPolyline(polylineOptions)
+
+                val bounds = LatLngBounds.Builder()
+                    .include(riderLoc)
+                    .include(driverLoc)
+                    .build()
+
+                map.animateCamera(
+                    CameraUpdateFactory.newLatLngBounds(bounds, 150),
+                    TaxiConstants.MAP_ANIMATION_DURATION,
+                    null
+                )
             }
         }
     }
