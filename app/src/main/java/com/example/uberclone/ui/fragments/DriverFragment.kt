@@ -1,6 +1,7 @@
 package com.example.uberclone.ui.fragments
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +19,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.uberclone.databinding.FragmentDriverBinding
 import com.example.uberclone.ui.adapters.DriverRequestsAdapter
+import com.example.uberclone.utils.RideStatus
+import com.example.uberclone.utils.TaxiConstants
+import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MAX
+import com.example.uberclone.utils.TaxiConstants.DIST_ARRIVAL_MIN
 import com.example.uberclone.utils.TaxiConstants.LOCATION_FASTEST_INTERVAL
 import com.example.uberclone.utils.TaxiConstants.LOCATION_INTERVAL
 import com.example.uberclone.utils.TaxiConstants.LOCATION_MAX_WAIT_TIME
@@ -52,9 +57,12 @@ class DriverFragment: Fragment() {
     private var mLastLatLng: LatLng? = null
     private var mLastSelectedRequest: TaxiRequest? = null
 
+    private var mCurrRideStatus = RideStatus.PENDING
+
     private val mRequestAdapter by lazy{
         DriverRequestsAdapter(driverLocation = mLastLatLng, taxiRequests = mActiveRequests){ selectedTaxiRequest ->
-            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.location)
+            // take care of end Location (needed when destination ride starts)
+            addDestinationAndAdjustMap(mLastLatLng!!, selectedTaxiRequest.startLocation, "Rider's Location")
             mLastSelectedRequest = selectedTaxiRequest
         }
     }
@@ -73,16 +81,88 @@ class DriverFragment: Fragment() {
     private val locationCallback = object : LocationCallback(){
         override fun onLocationResult(result: LocationResult) {
             super.onLocationResult(result)
-            Log.d(RiderFragment.TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
+            Log.d(TAG, "onLocationResult: ${result.locations.last().latitude}${result.locations.last().longitude}")
             result.lastLocation?.let { location ->
-                val lastKnownLatLng = LatLng(location.latitude, location.longitude)
-                mLastLatLng = lastKnownLatLng
+                val lastKnownDriverLatLng = LatLng(location.latitude, location.longitude)
+                mLastLatLng = lastKnownDriverLatLng
+
+                mLastSelectedRequest?.let {riderRequest ->
+                    when(mCurrRideStatus){
+                        RideStatus.PENDING -> {}
+                        RideStatus.EN_ROUTE -> {
+                            // riding towards the rider
+                            val distanceRemaining = TaxiConstants.calculateDistance(lastKnownDriverLatLng, riderRequest.startLocation)
+                            if (distanceRemaining in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX){
+                                // driver reached the rider
+                                requestLocationUpdates(false) // no more location updates to rider and firebase
+                                showDialogToStartDestinationRide(src=lastKnownDriverLatLng, taxiRequest =riderRequest)
+                            }
+                        }
+                        RideStatus.EN_ROUTE_DEST -> {
+                            // riding towards the rider's destination
+                            val distanceRemaining = TaxiConstants.calculateDistance(lastKnownDriverLatLng, riderRequest.endLocation)
+                            if (distanceRemaining in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX){
+                                // driver reached the destination
+                                requestLocationUpdates(false) // no more location updates to rider and firebase
+                                showRideCompletedDialog()
+                            }
+                        }
+                        RideStatus.CANCELLED_ONGOING_RIDE -> {}
+                        RideStatus.FINISHED -> {}
+                    }
+                }
+
                 mDriverViewModel.listenForDbChanges()
-                map?.updateCurrentLocationMarker(lastKnownLatLng)
+                map?.updateCurrentLocationMarker(lastKnownDriverLatLng)
                 // update driver location on firebase
                 mDriverViewModel.updateDriverLocationInOngoingReqToFirebase(driverLocation = mLastLatLng!!)
             }
         }
+    }
+
+    private fun showDialogToStartDestinationRide(src: LatLng, taxiRequest: TaxiRequest) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Start the ride to destination")
+            .setCancelable(false)
+            .setPositiveButton("Start"){ dialog, i ->
+                requestLocationUpdates(true)
+                mDriverViewModel.changeRideStatusToEnRouteDestination(taxiRequest)
+                // todo update the rider's marker on driver map
+                addDestinationAndAdjustMap(srcLocation = src, desLocation = taxiRequest.endLocation, destinationMarkerText = "Drop-off Location")
+                mCurrRideStatus = RideStatus.EN_ROUTE_DEST
+            }
+            .setNegativeButton("Cancel"){ dialog, i ->
+                Log.d(TAG, "showDialogToStartDestinationRide: Cancel Clicked")
+            }.show()
+    }
+
+    private fun showRideCompletedDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Drop off the rider")
+            .setCancelable(false)
+            .setPositiveButton("Start"){ dialog, i ->
+//                requestLocationUpdates(false)
+                // todo process the payment at the end of the ride
+                Log.d(TAG, "showRideCompletedDialog: ride Completed")
+                mLastSelectedRequest?.let { mDriverViewModel.changeRideStatusToFinished(it) }
+                    ?: Log.e(TAG, "unable to execute the action as the request details couldn't be found")
+                // todo end ongoing request (driver controls ongoing and rider, riderRequests)
+                removeFromOngoingRequests()
+                resetDriverState()
+            }
+            .setNegativeButton("Cancel"){ dialog, i ->
+                Log.d(TAG, "showRideCompletedDialog: ride canceled")
+            }.show()
+    }
+
+    private fun resetDriverState() {
+        mRiderMarker?.remove()
+        mRiderMarker = null
+        mLastSelectedRequest = null
+    }
+
+    private fun removeFromOngoingRequests() {
+        mDriverViewModel.removeFromOngoingRequests()
     }
 
     override fun onCreateView(
@@ -109,7 +189,6 @@ class DriverFragment: Fragment() {
             }
             mActiveRequests.isNotEmpty().let {
                 binding.btnAcceptRequest.isVisible = it
-                if(!it) mLastSelectedRequest = null
             }
         }
 
@@ -150,24 +229,24 @@ class DriverFragment: Fragment() {
         } else fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun addDestinationAndAdjustMap(driverLocation: LatLng, riderLocation: LatLng){
+    private fun addDestinationAndAdjustMap(srcLocation: LatLng, desLocation: LatLng, destinationMarkerText: String){
         mRiderMarker?.remove()
-        val newMarkerOptions = MarkerOptions()
-            .position(riderLocation)
-            .title("Rider's Location")
-        mRiderMarker = map?.addMarker(newMarkerOptions)
+        val riderMarkerOptions = MarkerOptions()
+            .position(desLocation)
+            .title(destinationMarkerText)
+        mRiderMarker = map?.addMarker(riderMarkerOptions)
 
         mDriverMarker?.remove()
-        val markerOptions = MarkerOptions()
-            .position(driverLocation)
+        val driverMarkerOptions = MarkerOptions()
+            .position(srcLocation)
             .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
             .title("Current Location")
-        mDriverMarker = map?.addMarker(markerOptions)
+        mDriverMarker = map?.addMarker(driverMarkerOptions)
 
         // constructing a bound to fit two points on the map
         val bounds = LatLngBounds.Builder()
-            .include(driverLocation)
-            .include(riderLocation)
+            .include(srcLocation)
+            .include(desLocation)
             .build()
         // moving the camera
         map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,150),
@@ -176,7 +255,8 @@ class DriverFragment: Fragment() {
 
     private fun GoogleMap?.updateCurrentLocationMarker(driverLocation: LatLng) {
         mRiderMarker?.let {
-            addDestinationAndAdjustMap(driverLocation = driverLocation, riderLocation = it.position)
+            // don't make api call when the driver's position isn't changed much from the previous known location
+            addDestinationAndAdjustMap(srcLocation = driverLocation, desLocation = it.position, "Rider's Location")
         } ?: kotlin.run {
             // clearing the map
             this?.clear()
@@ -193,7 +273,8 @@ class DriverFragment: Fragment() {
 
     private fun acceptTaxiRequest(){
         mLastSelectedRequest?.let {
-            mDriverViewModel.acceptTaxiRequest(it, driverLocation = mLastLatLng!!)
+            mDriverViewModel.acceptTaxiRequest(taxiRequest = it, driverLocation = mLastLatLng!!)
+            mCurrRideStatus = RideStatus.EN_ROUTE
         } ?: Toast.makeText(requireContext(),"unable to accept this request", Toast.LENGTH_SHORT).show()
     }
 
@@ -250,5 +331,9 @@ class DriverFragment: Fragment() {
     override fun onPause() {
         super.onPause()
         binding.mapViewDriver.onPause()
+    }
+
+    companion object{
+        const val TAG = "my#DriverFragment"
     }
 }

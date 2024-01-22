@@ -19,7 +19,7 @@ class DriverRequestsAdapter(
     inner class RequestsViewHolder(itemView: View): RecyclerView.ViewHolder(itemView){
         fun bind(item: TaxiRequest){
             itemView.findViewById<TextView>(R.id.tv_item_taxi_req).text = driverLocation?.let {
-                TaxiConstants.calculateDistance(it, item.location).toString() + UNIT_KM
+                TaxiConstants.calculateDistance(it, item.startLocation).toString() + UNIT_KM
             } ?: "Distance will be updated"
         }
     }

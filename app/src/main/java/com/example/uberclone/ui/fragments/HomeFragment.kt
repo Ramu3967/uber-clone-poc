@@ -11,7 +11,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentHomeBinding
-import com.example.uberclone.utils.HOMESCREENDIRECTIONS
+import com.example.uberclone.utils.HomeScreenDirections
 import com.example.uberclone.utils.TaxiConstants.RIDER
 import com.example.uberclone.vm.SharedViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -59,8 +59,8 @@ class HomeFragment : Fragment() {
 
         mSharedViewModel.mHomeRedirectLV.observe(viewLifecycleOwner){ direction ->
             when(direction){
-                HOMESCREENDIRECTIONS.DIR_RIDER -> findNavController().navigate(R.id.action_homeFragment_to_riderFragment)
-                HOMESCREENDIRECTIONS.DIR_DRIVER -> findNavController().navigate(R.id.action_homeFragment_to_driverFragment)
+                HomeScreenDirections.DIR_RIDER -> findNavController().navigate(R.id.action_homeFragment_to_riderFragment)
+                HomeScreenDirections.DIR_DRIVER -> findNavController().navigate(R.id.action_homeFragment_to_driverFragment)
                 else -> {}
             }
         }

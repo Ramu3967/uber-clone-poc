@@ -1,5 +1,6 @@
 package com.example.uberclone.utils
 
+import android.view.View
 import com.google.android.gms.maps.model.LatLng
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -21,11 +22,14 @@ object TaxiConstants  {
     const val LOCATION_MAX_WAIT_TIME_RIDER = 20000L
 
     // FB details for the active requests node - rider
-    const val DB_ACTIVE_REQUESTS = "activeRequests"
-    const val DB_LOCATION = "location"
-    const val DB_LATITUDE = "latitude"
-    const val DB_LONGITUDE = "longitude"
+    const val DB_RIDER_REQUESTS = "riderRequests"
+    const val DB_START_LOCATION = "startLocation"
+    const val DB_END_LOCATION = "endLocation"
     const val DB_REQUESTED_AT = "requestedAt"
+    const val DB_RIDE_STATUS = "rideStatus"
+    const val DB_DRIVER_ID = "driverId"
+    const val DB_EMPTY_FIELD = ""
+
 
     // FB details for the ongoing requests node - driver
     const val DB_ONGOING_REQUESTS = "ongoingRequests"
@@ -41,6 +45,13 @@ object TaxiConstants  {
     const val EMAIL = "email"
     const val USERS = "users"
 
+    // finished rides
+    const val DB_FINISHED_REQUESTS = "finishedRequests"
+    const val DB_FINISHED_STATUS = "status"
+    const val DB_CANCELED_REASON = "reason"
+    const val DB_CANCELED_BY = "canceledBy"
+    const val DB_DROP_OFF = "dropOff"
+
     const val UNIT_KM = " KM"
     const val DELIMITER = ","
 
@@ -49,7 +60,7 @@ object TaxiConstants  {
 
     // kilometers
     private const val EARTH_RADIUS = 6371.0
-    const val DIST_NEAR_BY= 3.0
+    const val DIST_NEAR_BY = 1.5
     const val DIST_ARRIVAL_MIN = 0.0
     const val DIST_ARRIVAL_MAX = 0.1
 
@@ -71,8 +82,23 @@ object TaxiConstants  {
     fun calculateDistance(source: LatLng, destination: LatLng): Double {
         return calculateDistance(source.latitude, source.longitude, destination.latitude, destination.longitude)
     }
+
+    fun View.show(){ visibility = View.VISIBLE}
+    fun View.hide(){ visibility = View.INVISIBLE}
+    fun View.remove(){ visibility = View.GONE}
 }
 
-enum class HOMESCREENDIRECTIONS{
+enum class HomeScreenDirections{
     DIR_HOME, DIR_RIDER, DIR_DRIVER
+}
+
+enum class RideStatus{
+    PENDING, EN_ROUTE, FINISHED, CANCELLED_ONGOING_RIDE, EN_ROUTE_DEST
+}
+
+sealed class RiS{
+    object Pending: RiS()
+    object EnRoute: RiS()
+    object Finished: RiS()
+    class CancelledOngoingRide(val msg: String): RiS()
 }
