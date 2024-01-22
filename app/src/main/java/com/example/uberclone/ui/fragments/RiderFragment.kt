@@ -21,6 +21,8 @@ import com.example.uberclone.R
 import com.example.uberclone.databinding.FragmentRiderBinding
 import com.example.uberclone.utils.RideStatus
 import com.example.uberclone.utils.TaxiConstants
+import com.example.uberclone.utils.TaxiConstants.remove
+import com.example.uberclone.utils.TaxiConstants.show
 import com.example.uberclone.vm.RiderViewModel
 import com.example.uberclone.vm.SharedViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -60,7 +62,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     private var mCurrentState = RideStatus.PENDING
 
     // static final destination location
-    private var mDestination = LatLng(43.79731053924396, -79.33019465971456)
+    private var mDestination = LatLng(43.7246530, -79.2749498)
 
     @Inject
     lateinit var locationPermissions: Array<String>
@@ -110,6 +112,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
     }
 
     private fun setupUI(savedInstanceState: Bundle?) {
+        mRiderViewModel.setDestinationLocation(mDestination)
         binding.btnRiderLogout.setOnClickListener { mSharedViewModel.logoutUser() }
         binding.mapView.getMapAsync {
             map = it
@@ -118,7 +121,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
         binding.btnCallTaxi.setOnClickListener {
             mLastLatLng?.let {
                 if (!isRequestActive) {
-                    mRiderViewModel.sendTaxiRequest(it)
+                    mRiderViewModel.sendTaxiRequest(it, endLocation = mDestination)
                     // TODO: spin a loader and disable this button. Same goes for the below function.
                 } else {
                     mRiderViewModel.cancelTaxiRequest()
@@ -141,7 +144,7 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
 
         // will be converted to a view-state
         mRiderViewModel.mDriverUpdatesLV.observe(viewLifecycleOwner){ driverUpdate ->
-            val (driverLocation, notificationMsg,driverReached) = driverUpdate
+            val (driverId,driverLocation, notificationMsg,driverReached) = driverUpdate
             when(mCurrentState){
                 RideStatus.PENDING -> {
                     // you don't get any updates when in this state
@@ -157,11 +160,35 @@ class RiderFragment: Fragment(R.layout.fragment_rider) {
                 }
                 RideStatus.EN_ROUTE_DEST -> {
                     driverLocation?.let { map?.run { updateLocationEnRouteDestination(this, it) } }
+                    if(driverReached) {
+                        Toast.makeText(requireContext(), "You've reached your destination", Toast.LENGTH_SHORT).show()
+                        Log.d(TAG, "observeLiveData: Waiting for the driver to end the ride")
+                        // Once the driver ends the ride (RideStatus.FINISHED), move the the ride request to finished request.
+                        // so show a loader here
+                        binding.llLoader.show()
+                    }
                 }
                 RideStatus.CANCELLED_ONGOING_RIDE -> {}
-                RideStatus.FINISHED -> {}
+                RideStatus.FINISHED -> {
+                    binding.llLoader.remove()
+                    notificationMsg?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
+                    // loader
+                    driverId?.let { resetState(it) }
+                }
             }
         }
+    }
+
+    private fun resetState(driverId: String) {
+        mRiderViewModel.resetRiderState(driverId)
+        map?.clear()
+        mLastLatLng?.let {
+            map?.addMarker(
+                MarkerOptions()
+                    .position(it)
+                    .title("Current Location"))
+        }
+
     }
 
     private fun GoogleMap?.updateDriverLocation(driverLoc: LatLng) = this?.run {

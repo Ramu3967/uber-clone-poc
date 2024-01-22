@@ -1,5 +1,6 @@
 package com.example.uberclone.utils
 
+import android.view.View
 import com.google.android.gms.maps.model.LatLng
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -44,6 +45,13 @@ object TaxiConstants  {
     const val EMAIL = "email"
     const val USERS = "users"
 
+    // finished rides
+    const val DB_FINISHED_REQUESTS = "finishedRequests"
+    const val DB_FINISHED_STATUS = "status"
+    const val DB_CANCELED_REASON = "reason"
+    const val DB_CANCELED_BY = "canceledBy"
+    const val DB_DROP_OFF = "dropOff"
+
     const val UNIT_KM = " KM"
     const val DELIMITER = ","
 
@@ -52,7 +60,7 @@ object TaxiConstants  {
 
     // kilometers
     private const val EARTH_RADIUS = 6371.0
-    const val DIST_NEAR_BY= 3.0
+    const val DIST_NEAR_BY = 1.5
     const val DIST_ARRIVAL_MIN = 0.0
     const val DIST_ARRIVAL_MAX = 0.1
 
@@ -74,6 +82,10 @@ object TaxiConstants  {
     fun calculateDistance(source: LatLng, destination: LatLng): Double {
         return calculateDistance(source.latitude, source.longitude, destination.latitude, destination.longitude)
     }
+
+    fun View.show(){ visibility = View.VISIBLE}
+    fun View.hide(){ visibility = View.INVISIBLE}
+    fun View.remove(){ visibility = View.GONE}
 }
 
 enum class HomeScreenDirections{

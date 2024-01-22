@@ -126,9 +126,9 @@ class DriverFragment: Fragment() {
             .setCancelable(false)
             .setPositiveButton("Start"){ dialog, i ->
                 requestLocationUpdates(true)
+                mDriverViewModel.changeRideStatusToEnRouteDestination(taxiRequest)
                 // todo update the rider's marker on driver map
                 addDestinationAndAdjustMap(srcLocation = src, desLocation = taxiRequest.endLocation, destinationMarkerText = "Drop-off Location")
-                mDriverViewModel.startNavigationToDestination(taxiRequest)
                 mCurrRideStatus = RideStatus.EN_ROUTE_DEST
             }
             .setNegativeButton("Cancel"){ dialog, i ->
@@ -141,14 +141,28 @@ class DriverFragment: Fragment() {
             .setTitle("Drop off the rider")
             .setCancelable(false)
             .setPositiveButton("Start"){ dialog, i ->
-                requestLocationUpdates(false)
+//                requestLocationUpdates(false)
                 // todo process the payment at the end of the ride
                 Log.d(TAG, "showRideCompletedDialog: ride Completed")
-                // todo move the riderRequest to FinishedRequests
+                mLastSelectedRequest?.let { mDriverViewModel.changeRideStatusToFinished(it) }
+                    ?: Log.e(TAG, "unable to execute the action as the request details couldn't be found")
+                // todo end ongoing request (driver controls ongoing and rider, riderRequests)
+                removeFromOngoingRequests()
+                resetDriverState()
             }
             .setNegativeButton("Cancel"){ dialog, i ->
                 Log.d(TAG, "showRideCompletedDialog: ride canceled")
             }.show()
+    }
+
+    private fun resetDriverState() {
+        mRiderMarker?.remove()
+        mRiderMarker = null
+        mLastSelectedRequest = null
+    }
+
+    private fun removeFromOngoingRequests() {
+        mDriverViewModel.removeFromOngoingRequests()
     }
 
     override fun onCreateView(
@@ -175,7 +189,6 @@ class DriverFragment: Fragment() {
             }
             mActiveRequests.isNotEmpty().let {
                 binding.btnAcceptRequest.isVisible = it
-                if(!it) mLastSelectedRequest = null
             }
         }
 
@@ -260,7 +273,7 @@ class DriverFragment: Fragment() {
 
     private fun acceptTaxiRequest(){
         mLastSelectedRequest?.let {
-            mDriverViewModel.acceptTaxiRequest(it, driverLocation = mLastLatLng!!)
+            mDriverViewModel.acceptTaxiRequest(taxiRequest = it, driverLocation = mLastLatLng!!)
             mCurrRideStatus = RideStatus.EN_ROUTE
         } ?: Toast.makeText(requireContext(),"unable to accept this request", Toast.LENGTH_SHORT).show()
     }

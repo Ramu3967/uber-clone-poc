@@ -49,13 +49,16 @@ class DriverViewModel@Inject constructor(
     private lateinit var mActiveReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
 
+    // rearrange the code -> similar functions together
+
     private val mActiveReqDbListener = object : ValueEventListener {
         override fun onDataChange(snapshot: DataSnapshot) {
             Log.d(TAG, "mActiveReqListener_onDataChange: data changed}")
             if (snapshot.exists()) {
                 val results = mutableListOf<TaxiRequest>()
                 for (uidSnapshot in snapshot.children) {
-                    results.add(TaxiRequest.fromActiveReqSnapshot(uidSnapshot))
+                    if(uidSnapshot.child(DB_RIDE_STATUS).getValue(String::class.java)==RideStatus.PENDING.name)
+                        results.add(TaxiRequest.fromActiveReqSnapshot(uidSnapshot))
                 }
                 _mUserRequestsLV.value= results
             } else {
@@ -78,7 +81,7 @@ class DriverViewModel@Inject constructor(
         auth.currentUser?.let {driver ->
             val driverId = driver.uid
             saveOngoingRequests(driverId, driverLocation, taxiRequest)
-            updateRiderRequest(driver, taxiRequest)
+            updateRiderRequestEnROute(driver, taxiRequest)
         }
     }
 
@@ -104,7 +107,7 @@ class DriverViewModel@Inject constructor(
         isRequestAccepted = true
     }
 
-    private fun updateRiderRequest(driver: FirebaseUser, taxiRequest: TaxiRequest) {
+    private fun updateRiderRequestEnROute(driver: FirebaseUser, taxiRequest: TaxiRequest) {
         val riderRequestRef = database.reference.child("$DB_RIDER_REQUESTS/${taxiRequest.uid}")
         val children = mapOf(
             DB_DRIVER_ID to driver.uid,
@@ -140,15 +143,26 @@ class DriverViewModel@Inject constructor(
             val loc = "${driverLocation.latitude}$DELIMITER${driverLocation.longitude}"
             driverDetailsRef.child(DB_DRIVER_LOCATION).setValue(loc)
         }else{
-            Log.e(TAG,"updateDriverLocationInOngoingReqToFirebase: Driver didn't accept the request yet")
+            Log.e(TAG,"updateDriverLocationInOngoingReqToFirebase: Driver didn't accept any requests yet")
         }
     }
 
-    fun startNavigationToDestination(taxiRequest: TaxiRequest) {
+    fun changeRideStatusToEnRouteDestination(taxiRequest: TaxiRequest) {
         // draw polyline to the endLocation (works on real device, so optional)
         // change the rideStatus to EN_ROUTE_DEST in riderRequests
         val rideStatusRef = database.reference.child("$DB_RIDER_REQUESTS/${taxiRequest.uid}/$DB_RIDE_STATUS")
         rideStatusRef.setValue(RideStatus.EN_ROUTE_DEST.name)
+    }
+
+    fun changeRideStatusToFinished(taxiRequest: TaxiRequest) {
+        val rideStatusRef = database.reference.child("$DB_RIDER_REQUESTS/${taxiRequest.uid}/$DB_RIDE_STATUS")
+        rideStatusRef.setValue(RideStatus.FINISHED)
+    }
+
+    fun removeFromOngoingRequests() {
+        auth.currentUser?.let {
+            mOngoingReqRef.child(it.uid).removeValue()
+        }
     }
 
     companion object{

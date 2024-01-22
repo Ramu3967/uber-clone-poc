@@ -12,6 +12,7 @@ import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_ID
 import com.example.uberclone.utils.TaxiConstants.DB_DRIVER_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_EMPTY_FIELD
 import com.example.uberclone.utils.TaxiConstants.DB_END_LOCATION
+import com.example.uberclone.utils.TaxiConstants.DB_FINISHED_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_START_LOCATION
 import com.example.uberclone.utils.TaxiConstants.DB_ONGOING_REQUESTS
 import com.example.uberclone.utils.TaxiConstants.DB_REQUESTED_AT
@@ -47,12 +48,16 @@ class RiderViewModel@Inject constructor(
     private var driverDbLocationRef: DatabaseReference? = null
     private lateinit var mRiderReqRef: DatabaseReference
     private lateinit var mOngoingReqRef: DatabaseReference
+    private var mMyRequestDetails: DataSnapshot? = null
+
     private var mStartRiderLocation: LatLng? = null
 
     private var isRiderFirstNotification = false
     private var driverNearbyMessageSent = false
 
     private var isListeningForDb = false
+
+    private lateinit var mRiderDestinationLocation: LatLng
 
     @Inject
     lateinit var api: IOSRMApiService
@@ -64,13 +69,15 @@ class RiderViewModel@Inject constructor(
                 _mRequestStateLV.value = isReqExists // updates the button
                 if(isReqExists){
                     val myRequest = riderReqSnapshot.child(user.uid)
+                    mMyRequestDetails = myRequest
                     val status = myRequest.child(DB_RIDE_STATUS).getValue(RideStatus::class.java) ?: RideStatus.PENDING
                     mCurrentStateLV.value = status
+                    val driverId = myRequest.child(DB_DRIVER_ID).getValue(String::class.java) ?: DB_EMPTY_FIELD
                     when(status) {
                         RideStatus.PENDING -> { }
                         RideStatus.EN_ROUTE -> {
                             // driver accepted the request, set up the listener on driver updates
-                            val driverId = myRequest.child(DB_DRIVER_ID).getValue(String::class.java) ?: DB_EMPTY_FIELD
+
                             if(driverId != DB_EMPTY_FIELD){
                                 setDriverDbLocationListener(driverId)
                             }else{
@@ -79,7 +86,6 @@ class RiderViewModel@Inject constructor(
                         }
                         RideStatus.EN_ROUTE_DEST -> {
                             Log.d(TAG, "onDataChange: driver picked up the rider and is moving to rider's destination")
-                            val driverId = myRequest.child(DB_DRIVER_ID).getValue(String::class.java) ?: DB_EMPTY_FIELD
                             if(driverId != DB_EMPTY_FIELD){
                                 // set up the listener for location updates
                                 setDriverDbLocationListener(driverId)
@@ -88,7 +94,9 @@ class RiderViewModel@Inject constructor(
                                 Log.e(TAG, "onDataChange: Enroute to destination but  driver Id was not found")
                             }
                         }
-                        RideStatus.FINISHED -> {}
+                        RideStatus.FINISHED -> {
+                            mDriverUpdatesLV.value= DriverUpdates(driverId = driverId, msg = "Ride Ended")
+                        }
                         RideStatus.CANCELLED_ONGOING_RIDE -> {}
                     }
                 }else{
@@ -134,7 +142,15 @@ class RiderViewModel@Inject constructor(
                 }
             }
             else if(mCurrentStateLV.value == RideStatus.EN_ROUTE_DEST){
-                mDriverUpdatesLV.value = DriverUpdates(location = driverLocation)
+                val distanceDriverDestination = calculateDistance(driverLocation, mRiderDestinationLocation)
+                mDriverUpdatesLV.value = when (distanceDriverDestination) {
+                    in DIST_ARRIVAL_MIN..DIST_ARRIVAL_MAX -> {
+                        // stop the updates from the driver
+                        stopDriverUpdates()
+                        DriverUpdates(location = driverLocation, msg = null, driverReached = true)
+                    }
+                    else -> DriverUpdates(location = driverLocation)
+                }
             }
 
         }
@@ -183,7 +199,7 @@ class RiderViewModel@Inject constructor(
         }
     }
 
-    fun sendTaxiRequest(startLocation: LatLng, endLocation: LatLng = LatLng(43.79731053924396, -79.33019465971456)){
+    fun sendTaxiRequest(startLocation: LatLng, endLocation: LatLng){
         auth.currentUser?.let {user ->
             val dbRef = database.reference
             val activeReqRef = dbRef.child(DB_RIDER_REQUESTS).child(user.uid)
@@ -217,9 +233,74 @@ class RiderViewModel@Inject constructor(
     }
 
     fun stopDriverUpdates() {
+//        when(mCurrentStateLV.value){
+//            RideStatus.EN_ROUTE -> {}
+//        }
         isRiderFirstNotification = false
         driverDbLocationRef?.removeEventListener(mDiverLocationRefListener)
         driverDbLocationRef = null
+    }
+
+    fun setDestinationLocation(destination: LatLng) {
+        mRiderDestinationLocation = destination
+    }
+
+    fun resetRiderState(driverId: String) {
+        val importantData: Any? = null // to be sent to finished state such as timestamps of pickups and drop off or any other info
+        removeFromOngoingRequests(driverId)
+        // move riderRequest to finished request with R:D:T childID
+        saveToFinishedRides(driverId)
+        mCurrentStateLV.value = RideStatus.PENDING
+        _mRequestStateLV.value = false
+    }
+
+    private fun removeFromOngoingRequests(driverId: String) {
+        mOngoingReqRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(ongoingRides: DataSnapshot) {
+                if (ongoingRides.hasChild(driverId)) {
+                    // save imp data from this request like timestamps for future analysis
+                    mOngoingReqRef.child(driverId).removeValue()
+                }
+                // no need to listen after removing this request
+                mOngoingReqRef.removeEventListener(this)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(
+                    TAG,
+                    "ResetState_OngoingReq_onCancelled: failed with message ${error.message}"
+                )
+                mOngoingReqRef.removeEventListener(this)
+            }
+        })
+    }
+
+    /**
+     * handle finished and canceled rides
+     */
+    private fun saveToFinishedRides(driverId: String) {
+        // currently handling only finished rides as the cancel flow isn't implemented yet
+        auth.currentUser?.uid.let {riderId ->
+            val finishedRidesRef = database.reference.child(DB_FINISHED_REQUESTS)
+            val timeStamp = System.currentTimeMillis()
+            val uniqueID = "$riderId$DELIMITER$driverId$DELIMITER$timeStamp"
+            mMyRequestDetails?.run {
+                // on condition that one request/rider
+                val (endLat, endLon) = this.child(DB_END_LOCATION).getValue(String::class.java)!!.split(DELIMITER).map{ it.toDouble() }
+                val (startLat, startLon) = this.child(DB_START_LOCATION).getValue(String::class.java)!!.split(DELIMITER).map{ it.toDouble() }
+                val rideStatus = this.child(DB_RIDE_STATUS).getValue(String::class.java)!!
+                val requestAt = this.child(DB_REQUESTED_AT).getValue(Long::class.java)!!
+
+                val children = mapOf(
+                    DB_END_LOCATION to "$endLat,$endLon",
+                    DB_START_LOCATION to "$startLat,$startLon",
+                    DB_RIDE_STATUS to rideStatus,
+                    DB_REQUESTED_AT to requestAt
+                )
+                finishedRidesRef.child(uniqueID).updateChildren(children)
+
+            } ?: Log.e(TAG, "failed to move to finished rides, reason - unable to fetch riderRequest details")
+        }
     }
 
     companion object{
